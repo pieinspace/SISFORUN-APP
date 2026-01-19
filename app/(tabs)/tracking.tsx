@@ -1,181 +1,415 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from "react-native";
 import * as Location from "expo-location";
-import { AppContext } from "../../src/context/AppContext";
-import { formatPace, formatTime, haversineDistanceKm } from "../../src/utils/geo";
+import { formatPace } from "../../src/utils/geo";
+// import { calculateDistance } from "../../src/utils/geo";
 
-type TrackPoint = { latitude: number; longitude: number; timestamp: number };
+type LatLng = { latitude: number; longitude: number; timestamp?: number };
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function formatTime(seconds: number) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return h > 0 ? `${pad2(h)}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
+}
+
+// Fallback distance (Haversine) dalam KM
+function haversineKm(a: LatLng, b: LatLng) {
+  const R = 6371; // km
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLon = Math.sin(dLon / 2);
+
+  const h =
+    sinDLat * sinDLat +
+    Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
+
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return R * c;
+}
 
 export default function TrackingScreen() {
-  const ctx = useContext(AppContext);
-  const targetKm = ctx?.targetKm ?? 14;
+  const TARGET_KM = 14;
 
+  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [isTracking, setIsTracking] = useState(false);
+
   const [distanceKm, setDistanceKm] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [paceMinPerKm, setPaceMinPerKm] = useState(0);
 
-  const watchSub = useRef<Location.LocationSubscription | null>(null);
-  const lastPoint = useRef<TrackPoint | null>(null);
+  const [lastPoint, setLastPoint] = useState<LatLng | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const subRef = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const targetNotifiedRef = useRef(false);
+
+  const paceMinPerKm = useMemo(() => {
+    // Pace rata-rata = (waktu menit) / (jarak km)
+    if (distanceKm <= 0) return 0;
+    const minutes = elapsedSec / 60;
+    return minutes / distanceKm;
+  }, [elapsedSec, distanceKm]);
+
+  const progress = useMemo(() => {
+    if (TARGET_KM <= 0) return 0;
+    return Math.max(0, Math.min(1, distanceKm / TARGET_KM));
+  }, [distanceKm]);
+
+  const remainingKm = Math.max(0, TARGET_KM - distanceKm);
 
   useEffect(() => {
-    if (distanceKm > 0) {
-      const minutes = elapsedSec / 60;
-      setPaceMinPerKm(minutes / distanceKm);
-    } else setPaceMinPerKm(0);
+    // minta izin lokasi saat halaman dibuka
+    (async () => {
+      try {
+        if (Platform.OS === "web") {
+          // di web kadang GPS terbatas tergantung browser permission
+          setPermissionGranted(true);
+          return;
+        }
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        setPermissionGranted(status === "granted");
+        if (status !== "granted") {
+          setError("Izin lokasi ditolak. Aktifkan Location permission dulu.");
+        }
+      } catch (e: any) {
+        setPermissionGranted(false);
+        setError(e?.message ?? "Gagal meminta izin lokasi.");
+      }
+    })();
 
-    if (!targetNotifiedRef.current && distanceKm >= targetKm) {
-      targetNotifiedRef.current = true;
-      Alert.alert("Target tercapai", "Anda sudah mencapai target");
-    }
-  }, [distanceKm, elapsedSec, targetKm]);
+    return () => {
+      // cleanup saat keluar halaman
+      stopTrackingInternal();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const startTracking = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Izin ditolak", "Aplikasi butuh akses lokasi untuk tracking.");
+  function startTimer() {
+    if (timerRef.current) return;
+    timerRef.current = setInterval(() => {
+      setElapsedSec((s) => s + 1);
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+  }
+
+  async function startTracking() {
+    setError(null);
+
+    if (permissionGranted === false) {
+      Alert.alert("Izin lokasi dibutuhkan", "Aktifkan izin lokasi agar tracking bisa jalan.");
       return;
     }
 
-    setIsTracking(true);
+    try {
+      setIsTracking(true);
+      startTimer();
 
-    timerRef.current = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+      // ambil posisi awal
+      const initial = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
 
-    watchSub.current = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.Highest,
-        timeInterval: 1000,
-        distanceInterval: 3,
-      },
-      (pos) => {
-        const p: TrackPoint = {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          timestamp: pos.timestamp,
-        };
+      const p0: LatLng = {
+        latitude: initial.coords.latitude,
+        longitude: initial.coords.longitude,
+        timestamp: initial.timestamp,
+      };
+      setLastPoint(p0);
 
-        if (lastPoint.current) {
-          const inc = haversineDistanceKm(lastPoint.current, p);
-          // filter lonjakan error GPS
-          if (isFinite(inc) && inc >= 0 && inc < 0.2) {
-            setDistanceKm((d) => d + inc);
-          }
+      // mulai watch
+      const sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 1000,      // 1 detik
+          distanceInterval: 3,     // update tiap 3 meter
+        },
+        (pos) => {
+          const p: LatLng = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            timestamp: pos.timestamp,
+          };
+
+          setLastPoint((prev) => {
+            if (!prev) return p;
+
+            const dKm = haversineKm(prev, p);
+            // filter loncatan GPS aneh (misal > 0.2 km dalam 1 detik)
+            if (dKm > 0.2) return p;
+
+            setDistanceKm((dkm) => dkm + dKm);
+            return p;
+          });
         }
-        lastPoint.current = p;
+      );
+
+      subRef.current = sub;
+    } catch (e: any) {
+      setIsTracking(false);
+      stopTimer();
+      setError(e?.message ?? "Gagal memulai tracking.");
+    }
+  }
+
+  function stopTrackingInternal() {
+    try {
+      if (subRef.current) {
+        subRef.current.remove();
+        subRef.current = null;
       }
-    );
-  };
-
-  const stopTracking = () => {
+    } catch {}
+    stopTimer();
     setIsTracking(false);
+  }
 
-    if (watchSub.current) {
-      watchSub.current.remove();
-      watchSub.current = null;
-    }
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
+  function stopTracking() {
+    stopTrackingInternal();
 
-  const reset = () => {
-    lastPoint.current = null;
-    targetNotifiedRef.current = false;
+    // Kalau mau simpan ke context/leaderboard, bisa dihubungkan di sini:
+    // contoh:
+    // ctx.addRun({ distanceKm, durationSec: elapsedSec, paceMinPerKm, createdAt: Date.now() });
+
+    if (distanceKm > 0.01) {
+      Alert.alert("Sesi selesai", `Jarak: ${distanceKm.toFixed(2)} km\nWaktu: ${formatTime(elapsedSec)}`);
+    }
+  }
+
+  function resetTracking() {
+    stopTrackingInternal();
     setDistanceKm(0);
     setElapsedSec(0);
-    setPaceMinPerKm(0);
-  };
+    setLastPoint(null);
+    setError(null);
+  }
 
-  useEffect(() => {
-    return () => {
-      if (watchSub.current) watchSub.current.remove();
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
-  const progress = Math.min(1, distanceKm / targetKm);
-  const progressPct = Math.round(progress * 100);
+  const primaryLabel = isTracking ? "Stop" : "Start";
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>SISFORUN</Text>
+      <View style={styles.topArea}>
+        <Text style={styles.brand}>SISFORUN</Text>
 
-      <Text style={styles.big}>{distanceKm.toFixed(2)}</Text>
-      <Text style={styles.label}>KILOMETER</Text>
+        <Text style={styles.bigNumber}>{distanceKm.toFixed(2)}</Text>
+        <Text style={styles.unit}>KILOMETER</Text>
 
-      <View style={styles.statsRow}>
-        <View style={styles.statBox}>
-          <Text style={styles.statVal}>{formatPace(paceMinPerKm)}</Text>
-          <Text style={styles.statLab}>PACE / KM</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statVal}>{formatTime(elapsedSec)}</Text>
-          <Text style={styles.statLab}>WAKTU</Text>
+        <View style={styles.miniCardsRow}>
+          <View style={styles.miniCard}>
+            <Text style={styles.miniValue}>{paceMinPerKm > 0 ? formatPace(paceMinPerKm) : "0:00"}</Text>
+            <Text style={styles.miniLabel}>PACE / KM</Text>
+          </View>
+
+          <View style={styles.miniCard}>
+            <Text style={styles.miniValue}>{formatTime(elapsedSec)}</Text>
+            <Text style={styles.miniLabel}>WAKTU</Text>
+          </View>
         </View>
       </View>
 
-      <View style={styles.targetBox}>
-        <Text style={styles.targetTitle}>Target {targetKm} KM</Text>
-        <Text style={styles.targetSub}>{progressPct}%</Text>
+      <View style={styles.targetCard}>
+        <View style={styles.targetRow}>
+          <Text style={styles.targetTitle}>Target {TARGET_KM} KM</Text>
+          <Text style={styles.targetPct}>{Math.round(progress * 100)}%</Text>
+        </View>
+
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
         </View>
-        <Text style={styles.targetHint}>
-         {targetNotifiedRef.current || distanceKm >= targetKm
-           ? "Anda sudah mencapai target"
-           : `${(targetKm - distanceKm).toFixed(2)} km lagi menuju target`}
-        </Text>
 
+        <Text style={styles.targetHint}>
+          {remainingKm.toFixed(2)} km lagi menuju target
+        </Text>
       </View>
 
-      <View style={styles.btnRow}>
-        {!isTracking ? (
-          <TouchableOpacity style={styles.btnPrimary} onPress={startTracking}>
-            <Text style={styles.btnText}>▶ Start</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.btnDanger} onPress={stopTracking}>
-            <Text style={styles.btnText}>⏸ Stop</Text>
-          </TouchableOpacity>
-        )}
+      {!!error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
 
-        <TouchableOpacity style={styles.btnGhost} onPress={reset} disabled={isTracking}>
-          <Text style={[styles.btnGhostText, isTracking && { opacity: 0.4 }]}>Reset</Text>
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={isTracking ? stopTracking : startTracking}
+          style={[styles.primaryBtn, isTracking ? styles.stopBtn : styles.startBtn]}
+        >
+          <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity activeOpacity={0.9} onPress={resetTracking} style={styles.secondaryBtn}>
+          <Text style={styles.secondaryBtnText}>Reset</Text>
         </TouchableOpacity>
       </View>
 
-      {isTracking && <Text style={styles.banner}>Tracking sedang berjalan</Text>}
+      {/* Spacer biar aman dari tab bar */}
+      <View style={{ height: 90 }} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F6F3", padding: 16, alignItems: "center" },
-  title: { marginTop: 10, fontSize: 18, fontWeight: "900", color: "#2E3A2E" },
-  big: { fontSize: 68, fontWeight: "900", color: "#2E3A2E", marginTop: 30 },
-  label: { fontSize: 12, color: "#6B776B", letterSpacing: 2 },
-
-  statsRow: { flexDirection: "row", gap: 12, marginTop: 16 },
-  statBox: { width: 140, backgroundColor: "white", borderRadius: 18, padding: 14, alignItems: "center" },
-  statVal: { fontSize: 20, fontWeight: "900", color: "#2E3A2E" },
-  statLab: { fontSize: 10, color: "#6B776B", marginTop: 6 },
-
-  targetBox: { marginTop: 18, width: "100%", backgroundColor: "white", borderRadius: 18, padding: 14 },
-  targetTitle: { fontWeight: "900", color: "#2E3A2E" },
-  targetSub: { position: "absolute", right: 14, top: 14, fontWeight: "900", color: "#2E3A2E" },
-  progressTrack: { height: 10, borderRadius: 999, backgroundColor: "#E6E9E3", marginTop: 12, overflow: "hidden" },
-  progressFill: { height: "100%", backgroundColor: "#2E3A2E" },
-  targetHint: { marginTop: 10, fontSize: 12, color: "#6B776B" },
-
-  btnRow: { flexDirection: "row", gap: 12, marginTop: 18 },
-  btnPrimary: { backgroundColor: "#2E3A2E", paddingVertical: 14, paddingHorizontal: 24, borderRadius: 999 },
-  btnDanger: { backgroundColor: "#B00020", paddingVertical: 14, paddingHorizontal: 24, borderRadius: 999 },
-  btnText: { color: "white", fontWeight: "900" },
-  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: "#2E3A2E", paddingVertical: 14, paddingHorizontal: 20, borderRadius: 999 },
-  btnGhostText: { color: "#2E3A2E", fontWeight: "900" },
-
-  banner: { marginTop: 14, fontSize: 12, color: "#2E3A2E", fontWeight: "800" },
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F6F3",
+    paddingHorizontal: 16,
+    paddingTop: 18,
+  },
+  topArea: {
+    alignItems: "center",
+    marginTop: 6,
+    marginBottom: 18,
+  },
+  brand: {
+    fontSize: 16,
+    letterSpacing: 2,
+    fontWeight: "800",
+    color: "#2E3A2E",
+    marginBottom: 18,
+  },
+  bigNumber: {
+    fontSize: 72,
+    lineHeight: 78,
+    fontWeight: "900",
+    color: "#2E3A2E",
+  },
+  unit: {
+    marginTop: 2,
+    fontSize: 12,
+    letterSpacing: 2,
+    color: "rgba(46,58,46,0.7)",
+    fontWeight: "700",
+  },
+  miniCardsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 18,
+  },
+  miniCard: {
+    width: 150,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  miniValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#2E3A2E",
+  },
+  miniLabel: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.3,
+    color: "rgba(46,58,46,0.6)",
+  },
+  targetCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  targetRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  targetTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#2E3A2E",
+  },
+  targetPct: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#2E3A2E",
+  },
+  progressTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(46,58,46,0.12)",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "#2E3A2E",
+  },
+  targetHint: {
+    marginTop: 10,
+    fontSize: 12,
+    color: "rgba(46,58,46,0.65)",
+    fontWeight: "700",
+  },
+  errorBox: {
+    marginTop: 12,
+    backgroundColor: "#FFE8E8",
+    borderRadius: 14,
+    padding: 12,
+  },
+  errorText: {
+    color: "#B00020",
+    fontWeight: "700",
+  },
+  actionsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 18,
+  },
+  primaryBtn: {
+    minWidth: 140,
+    height: 44,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  startBtn: {
+    backgroundColor: "#2E3A2E",
+  },
+  stopBtn: {
+    backgroundColor: "#2E3A2E",
+  },
+  primaryBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 14,
+    letterSpacing: 0.5,
+  },
+  secondaryBtn: {
+    minWidth: 110,
+    height: 44,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(46,58,46,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryBtnText: {
+    color: "#2E3A2E",
+    fontWeight: "900",
+    fontSize: 14,
+  },
 });

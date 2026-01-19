@@ -17,7 +17,7 @@ export default function LoginScreen() {
   const onLogin = () => {
     try {
       ctx.login({ email, password, role });
-      router.replace("/(tabs)/dashboard");
+      router.replace("/(tabs)/tracking");
     } catch (e: any) {
       Alert.alert("Login gagal", e?.message ?? "Terjadi kesalahan.");
     }
