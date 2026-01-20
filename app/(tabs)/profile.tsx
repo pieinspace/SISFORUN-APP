@@ -1,11 +1,30 @@
-import React, { useContext } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { router } from "expo-router";
+import React, { useContext, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
+import { useRouter } from "expo-router";
 import { AppContext } from "../../src/context/AppContext";
 
 export default function ProfileScreen() {
   const ctx = useContext(AppContext);
-  if (!ctx || !ctx.user) return null;
+  const router = useRouter();
+
+  // kalau context belum kebaca (sangat sebentar), tampilkan loading
+  if (!ctx) {
+    return (
+      <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  // kalau belum login / user null -> langsung arahkan ke login
+  useEffect(() => {
+    if (!ctx.isLoggedIn || !ctx.user) {
+      router.replace("/(auth)/login");
+    }
+  }, [ctx.isLoggedIn, ctx.user, router]);
+
+  // sementara menunggu redirect jalan
+  if (!ctx.isLoggedIn || !ctx.user) return null;
 
   const onLogout = () => {
     ctx.logout();
@@ -19,13 +38,12 @@ export default function ProfileScreen() {
       <View style={styles.card}>
         <View style={styles.headerBox}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{ctx.user.name[0]?.toUpperCase()}</Text>
+            <Text style={styles.avatarText}>{ctx.user.name?.[0]?.toUpperCase() ?? "U"}</Text>
           </View>
-          <View>
+
+          <View style={{ flex: 1 }}>
             <Text style={styles.name}>{ctx.user.name}</Text>
             <Text style={styles.sub}>NRP: {ctx.user.nrp}</Text>
-            <Text style={styles.sub}>Role: {ctx.user.role}</Text>
-            <Text style={styles.sub}>Target: {ctx.targetKm} KM</Text>
           </View>
         </View>
 
@@ -50,6 +68,9 @@ export default function ProfileScreen() {
       </View>
 
       <Text style={styles.readonly}>* Profile hanya baca (read-only)</Text>
+
+      {/* spacer biar aman dari tab bar */}
+      <View style={{ height: 90 }} />
     </View>
   );
 }
@@ -57,10 +78,12 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F6F3", padding: 16 },
   title: { textAlign: "center", fontSize: 18, fontWeight: "900", color: "#2E3A2E", marginBottom: 12 },
+
   card: { backgroundColor: "white", borderRadius: 18, padding: 14 },
   headerBox: { flexDirection: "row", gap: 12, alignItems: "center" },
   avatar: { width: 64, height: 64, borderRadius: 99, backgroundColor: "#2E3A2E", alignItems: "center", justifyContent: "center" },
   avatarText: { color: "white", fontWeight: "900", fontSize: 20 },
+
   name: { fontSize: 16, fontWeight: "900", color: "#2E3A2E" },
   sub: { fontSize: 12, color: "#6B776B", marginTop: 2 },
 
