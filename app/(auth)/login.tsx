@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,28 +7,84 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { AppContext } from "../../src/context/AppContext";
+import type { UserRole } from "../../src/types/app";
+
+// Mock akun demo (NRP + password)
+const MOCK_ACCOUNTS = [
+  { nrp: "12345678", password: "password123" },
+  { nrp: "20231234", password: "sisforun123" },
+  { nrp: "77777777", password: "larikuat1" }, // min 6
+];
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const ctx = useContext(AppContext);
+
   const [nrp, setNrp] = useState("");
   const [password, setPassword] = useState("");
 
+  const demoText = useMemo(
+    () =>
+      MOCK_ACCOUNTS.map((a) => `• NRP: ${a.nrp} | Pass: ${a.password}`).join(
+        "\n"
+      ),
+    []
+  );
+
   const onLogin = () => {
-    if (!nrp || !password) {
+    const cleanNrp = nrp.trim();
+    const cleanPass = password;
+
+    // validasi form
+    if (!cleanNrp || !cleanPass) {
       Alert.alert("Login gagal", "NRP dan password wajib diisi");
       return;
     }
 
-    if (!/^[0-9]+$/.test(nrp)) {
+    if (!/^[0-9]+$/.test(cleanNrp)) {
       Alert.alert("Login gagal", "NRP harus berupa angka");
       return;
     }
 
-    if (password.length < 6) {
+    if (cleanPass.length < 6) {
       Alert.alert("Login gagal", "Password minimal 6 karakter");
       return;
     }
 
-    Alert.alert("Login berhasil", `NRP: ${nrp}`);
+    // cek akun mock
+    const found = MOCK_ACCOUNTS.find((a) => a.nrp === cleanNrp);
+    if (!found) {
+      Alert.alert("Login gagal", "NRP tidak terdaftar");
+      return;
+    }
+
+    if (found.password !== cleanPass) {
+      Alert.alert("Login gagal", "Password salah");
+      return;
+    }
+
+    if (!ctx) {
+      Alert.alert("Error", "AppContext belum siap. Coba reload.");
+      return;
+    }
+
+    // ✅ ikut AppContext: login({email, password, role})
+    // NRP kita ubah jadi email dummy
+    const payload = {
+      email: `${cleanNrp}@sisforun.local`,
+      password: cleanPass,
+      role: "pns" as UserRole, // aman karena di AppContext kamu memang cek "pns"
+    };
+
+    try {
+      ctx.login(payload);
+      Alert.alert("Login berhasil", `Selamat datang!`);
+      router.replace("/(tabs)/tracking");
+    } catch (e: any) {
+      Alert.alert("Login gagal", e?.message ?? "Terjadi kesalahan saat login.");
+    }
   };
 
   return (
@@ -61,7 +117,7 @@ export default function LoginScreen() {
           style={styles.input}
         />
 
-        <TouchableOpacity style={styles.btn} onPress={onLogin}>
+        <TouchableOpacity style={styles.btn} onPress={onLogin} activeOpacity={0.9}>
           <Text style={styles.btnText}>Masuk →</Text>
         </TouchableOpacity>
 
@@ -126,6 +182,25 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  demoBox: {
+    backgroundColor: "#F3F4F1",
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
+  demoTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#2E3A2E",
+    marginBottom: 6,
+  },
+  demoText: {
+    fontSize: 11,
+    color: "#4C5A4C",
+    fontWeight: "700",
+    lineHeight: 16,
+  },
+
   label: {
     fontSize: 12,
     fontWeight: "700",
@@ -141,6 +216,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
     fontSize: 14,
+    backgroundColor: "white",
   },
 
   btn: {
