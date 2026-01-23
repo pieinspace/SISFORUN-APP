@@ -16,8 +16,6 @@ export const AppContext = createContext<AppContextValue | null>(null);
 
 export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  // dummy user (akan di-set saat login)
   const [user, setUser] = useState<User | null>(null);
 
   const [leaderboard] = useState<LeaderboardItem[]>([
@@ -33,7 +31,6 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     { id: "10", name: "Joko Widodo", nrp: "RUN-010", distanceKm: 11.8, paceMinPerKm: 5.5 },
   ]);
 
-  // urut sesuai SRS: jarak desc, jika sama pace asc
   const sortedLeaderboard = useMemo(() => {
     return [...leaderboard].sort((a, b) => {
       if (b.distanceKm !== a.distanceKm) return b.distanceKm - a.distanceKm;
@@ -41,17 +38,18 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     });
   }, [leaderboard]);
 
-  const targetKm = user?.role === "pns" ? 10 : 14; // default 14 kalau belum ada user
+  const targetKm = user?.role === "pns" ? 10 : 14;
 
   const login: AppContextValue["login"] = ({ email, password, role }) => {
-    // dummy validasi: asal tidak kosong
     if (!email.trim() || password.length < 6) {
       throw new Error("Email wajib dan password minimal 6 karakter.");
     }
 
+    const nrpFromEmail = email.split("@")[0] || "00000000";
+
     setUser({
       name: "admin",
-      nrp: "1234567890",
+      nrp: nrpFromEmail,
       role,
     });
     setIsLoggedIn(true);

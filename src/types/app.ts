@@ -1,4 +1,4 @@
-export type UserRole = "militer" | "pns";
+export type UserRole = "pns" | "nonpns";
 
 export type User = {
   name: string;
@@ -11,5 +11,5 @@ export type LeaderboardItem = {
   name: string;
   nrp: string;
   distanceKm: number;
-  paceMinPerKm: number; // makin kecil makin bagus
+  paceMinPerKm: number;
 };

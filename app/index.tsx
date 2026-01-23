@@ -6,7 +6,9 @@ export default function Index() {
   const ctx = useContext(AppContext);
   if (!ctx) return null;
 
-  return ctx.isLoggedIn
-    ? <Redirect href="/(tabs)/tracking" />
-    : <Redirect href="/(auth)/login" />;
+  return ctx.isLoggedIn ? (
+    <Redirect href="/(tabs)/tracking" />
+  ) : (
+    <Redirect href="/(auth)/login" />
+  );
 }
