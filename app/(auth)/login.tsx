@@ -1,8 +1,6 @@
-import React, { useContext, useMemo, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
-import { AppContext } from "../../src/context/AppContext";
-import type { UserRole } from "../../src/types/app";
+import React, { useContext, useMemo, useState } from "react";
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, {
   FadeInDown,
   FadeInUp,
@@ -11,6 +9,8 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
+import { AppContext } from "../../src/context/AppContext";
+import type { UserRole } from "../../src/types/app";
 
 // Mock akun demo (NRP + password)
 const MOCK_ACCOUNTS = [
@@ -25,6 +25,7 @@ export default function LoginScreen() {
 
   const [nrp, setNrp] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<UserRole>("militer");
 
   // untuk notif inline
   const [nrpError, setNrpError] = useState<string | null>(null);
@@ -105,13 +106,13 @@ export default function LoginScreen() {
     const payload = {
       email: `${cleanNrp}@sisforun.local`,
       password: cleanPass,
-      role: "pns" as UserRole,
+      role: role,
     };
 
     try {
       ctx.login(payload);
       Alert.alert("Login berhasil", "Selamat datang!");
-      router.replace("/(tabs)/tracking");
+      router.replace("/(tabs)/profile");
     } catch (e: any) {
       doShake();
       Alert.alert("Login gagal", e?.message ?? "Terjadi kesalahan saat login.");
@@ -165,6 +166,22 @@ export default function LoginScreen() {
             style={[styles.input, passError ? styles.inputError : null]}
           />
           {!!passError && <Text style={styles.errorInline}>{passError}</Text>}
+
+          <Text style={[styles.label, { marginTop: 14 }]}>Role</Text>
+          <View style={styles.roleContainer}>
+            <TouchableOpacity
+              style={[styles.roleBtn, role === 'militer' && styles.roleBtnActive]}
+              onPress={() => setRole('militer')}
+            >
+              <Text style={[styles.roleText, role === 'militer' && styles.roleTextActive]}>Militer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.roleBtn, role === 'asn' && styles.roleBtnActive]}
+              onPress={() => setRole('asn')}
+            >
+              <Text style={[styles.roleText, role === 'asn' && styles.roleTextActive]}>ASN</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity style={styles.btn} onPress={onLogin} activeOpacity={0.9}>
             <Text style={styles.btnText}>Masuk →</Text>
@@ -220,6 +237,23 @@ const styles = StyleSheet.create({
   },
   inputError: { borderColor: "#B00020" },
   errorInline: { marginTop: 6, fontSize: 12, color: "#B00020", fontWeight: "700" },
+
+  roleContainer: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  roleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+  },
+  roleBtnActive: {
+    borderColor: '#2E3A2E',
+    backgroundColor: '#E8EAE6',
+  },
+  roleText: { fontSize: 13, fontWeight: '700', color: '#6B776B' },
+  roleTextActive: { color: '#2E3A2E' },
 
   btn: {
     backgroundColor: "#2E3A2E",

@@ -1,6 +1,6 @@
+import { Tabs, useRouter } from "expo-router";
 import React from "react";
-import { Tabs } from "expo-router";
-import { View, TouchableOpacity, Text, type GestureResponderEvent } from "react-native";
+import { Text, TouchableOpacity, View, type GestureResponderEvent } from "react-native";
 
 function CenterPlayButton({
   onPress,
@@ -43,6 +43,7 @@ function CenterPlayButton({
 }
 
 export default function TabsLayout() {
+  const router = useRouter();
   return (
     <Tabs
       screenOptions={{
@@ -84,7 +85,7 @@ export default function TabsLayout() {
         options={{
           title: "",
           tabBarButton: (props) => (
-            <CenterPlayButton onPress={props.onPress} />
+            <CenterPlayButton onPress={() => router.push("/run")} />
           ),
         }}
       />

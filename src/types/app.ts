@@ -1,4 +1,4 @@
-export type UserRole = "pns" | "nonpns";
+export type UserRole = "militer" | "asn";
 
 export type User = {
   name: string;

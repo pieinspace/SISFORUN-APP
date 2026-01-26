@@ -38,7 +38,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     });
   }, [leaderboard]);
 
-  const targetKm = user?.role === "pns" ? 10 : 14;
+  const targetKm = user?.role === "asn" ? 10 : 14;
 
   const login: AppContextValue["login"] = ({ email, password, role }) => {
     if (!email.trim() || password.length < 6) {

@@ -1,14 +1,16 @@
+import SharedHeader from "@/src/components/SharedHeader";
+import { AppContext } from "@/src/context/AppContext";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useContext, useEffect } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { AppContext } from "../../src/context/AppContext";
 import Animated, {
   FadeInDown,
   FadeInUp,
@@ -19,6 +21,13 @@ export default function ProfileScreen() {
   const ctx = useContext(AppContext);
   const router = useRouter();
 
+  // kalau belum login / user null -> langsung arahkan ke login
+  useEffect(() => {
+    if (ctx && (!ctx.isLoggedIn || !ctx.user)) {
+      router.replace("/(auth)/login");
+    }
+  }, [ctx, router]);
+
   // kalau context belum kebaca (sangat sebentar), tampilkan loading
   if (!ctx) {
     return (
@@ -27,13 +36,6 @@ export default function ProfileScreen() {
       </View>
     );
   }
-
-  // kalau belum login / user null -> langsung arahkan ke login
-  useEffect(() => {
-    if (!ctx.isLoggedIn || !ctx.user) {
-      router.replace("/(auth)/login");
-    }
-  }, [ctx.isLoggedIn, ctx.user, router]);
 
   // sementara menunggu redirect jalan
   if (!ctx.isLoggedIn || !ctx.user) return null;
@@ -54,14 +56,28 @@ export default function ProfileScreen() {
 
   const avatarLetter = (ctx.user.name?.[0] ?? "U").toUpperCase();
 
+  const CustomRightIcons = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <View style={styles.toggleContainer}>
+        <Ionicons name="location-outline" size={14} color="#6B776B" style={{ marginRight: 4 }} />
+        <View style={[styles.dot, { backgroundColor: '#B00020' }]} />
+      </View>
+      <TouchableOpacity>
+        <Ionicons name="notifications-outline" size={24} color="#2E3A2E" />
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => router.push("/settings")}>
+        <Ionicons name="settings-outline" size={24} color="#2E3A2E" />
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      <Animated.Text
-        entering={FadeInUp.duration(350)}
-        style={styles.title}
-      >
-        Profile
-      </Animated.Text>
+      <SharedHeader
+        title="SISFORUN"
+        subtitle="Profile"
+        rightIcons={CustomRightIcons}
+      />
 
       <Animated.View
         entering={FadeInUp.delay(80).duration(400)}
@@ -86,44 +102,50 @@ export default function ProfileScreen() {
           entering={FadeInUp.delay(120).duration(380)}
           style={styles.metrics}
         >
-          <Animated.View
-            entering={FadeInDown.delay(160).duration(320)}
-            style={styles.metricBox}
-          >
+          <View style={styles.metricBox}>
+            <View style={{ marginBottom: 4 }}>
+              <Ionicons name="infinite-outline" size={20} color="#6B776B" />
+            </View>
             <Text style={styles.metricVal}>156.8</Text>
             <Text style={styles.metricLab}>Total KM</Text>
-          </Animated.View>
+          </View>
 
-          <Animated.View
-            entering={FadeInDown.delay(220).duration(320)}
-            style={styles.metricBox}
-          >
+          <View style={styles.metricBox}>
+            <View style={{ marginBottom: 4 }}>
+              <Ionicons name="timer-outline" size={20} color="#6B776B" />
+            </View>
             <Text style={styles.metricVal}>5:25</Text>
             <Text style={styles.metricLab}>Avg Pace</Text>
-          </Animated.View>
+          </View>
 
-          <Animated.View
-            entering={FadeInDown.delay(280).duration(320)}
-            style={styles.metricBox}
-          >
+          <View style={styles.metricBox}>
+            <View style={{ marginBottom: 4 }}>
+              <Ionicons name="pulse-outline" size={20} color="#6B776B" />
+            </View>
             <Text style={styles.metricVal}>24</Text>
             <Text style={styles.metricLab}>Total Lari</Text>
-          </Animated.View>
+          </View>
         </Animated.View>
 
-        <Animated.View entering={FadeInUp.delay(220).duration(380)}>
-          <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.85}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
-        </Animated.View>
+        <View style={styles.divider} />
+
+        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="person-outline" size={20} color="#2E3A2E" style={{ marginRight: 10 }} />
+            <Text style={styles.menuText}>Lihat Profile</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#6B776B" />
+        </TouchableOpacity>
+
+        <View style={{ height: 12 }} />
+
+        <TouchableOpacity style={styles.menuItem} onPress={onLogout} activeOpacity={0.7}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="log-out-outline" size={20} color="#B00020" style={{ marginRight: 10 }} />
+            <Text style={[styles.menuText, { color: '#B00020' }]}>Logout</Text>
+          </View>
+        </TouchableOpacity>
       </Animated.View>
-
-      <Animated.Text
-        entering={FadeInUp.delay(180).duration(360)}
-        style={styles.readonly}
-      >
-        * Profile hanya baca (read-only)
-      </Animated.Text>
 
       {/* spacer biar aman dari tab bar */}
       <View style={{ height: 90 }} />
@@ -132,51 +154,81 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F6F3", padding: 16 },
+  container: { flex: 1, backgroundColor: "#F5F6F3" },
 
-  title: {
-    textAlign: "center",
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#2E3A2E",
-    marginBottom: 12,
+  toggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8EAE6',
+    borderRadius: 99,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4
   },
 
-  card: { backgroundColor: "white", borderRadius: 18, padding: 14 },
+  card: {
+    backgroundColor: "white",
+    borderRadius: 24,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
 
-  headerBox: { flexDirection: "row", gap: 12, alignItems: "center" },
+  headerBox: {
+    flexDirection: "row",
+    gap: 16,
+    alignItems: "center",
+    backgroundColor: '#556B2F', // Olive Green darker
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16
+  },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 99,
-    backgroundColor: "#2E3A2E",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { color: "white", fontWeight: "900", fontSize: 20 },
+  avatarText: { color: "white", fontWeight: "900", fontSize: 24 },
 
-  name: { fontSize: 16, fontWeight: "900", color: "#2E3A2E" },
-  sub: { fontSize: 12, color: "#6B776B", marginTop: 2 },
+  name: { fontSize: 18, fontWeight: "900", color: "#FFFFFF" },
+  sub: { fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 2 },
 
-  metrics: { flexDirection: "row", gap: 10, marginTop: 14 },
+  metrics: { flexDirection: "row", gap: 10, marginTop: 4, marginBottom: 16 },
   metricBox: {
     flex: 1,
-    backgroundColor: "#F3F4F1",
+    backgroundColor: "#F8F8F8",
     borderRadius: 14,
-    padding: 12,
+    paddingVertical: 14,
     alignItems: "center",
   },
   metricVal: { fontWeight: "900", color: "#2E3A2E", fontSize: 16 },
-  metricLab: { fontSize: 11, color: "#6B776B", marginTop: 4 },
+  metricLab: { fontSize: 11, color: "#6B776B", marginTop: 2 },
 
-  logoutBtn: {
-    marginTop: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#B00020",
+  divider: { height: 1, backgroundColor: '#F0F0F0', marginBottom: 16 },
+
+  menuItem: {
+    backgroundColor: '#F8F8F8',
+    padding: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
   },
-  logoutText: { textAlign: "center", color: "#B00020", fontWeight: "900" },
-
-  readonly: { marginTop: 10, textAlign: "center", fontSize: 11, color: "#6B776B" },
+  menuText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2E3A2E'
+  }
 });
