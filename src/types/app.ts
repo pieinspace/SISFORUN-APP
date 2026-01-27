@@ -1,6 +1,7 @@
 export type UserRole = "militer" | "asn";
 
 export type User = {
+  id?: string | number; // Added to support backend ID
   name: string;
   nrp: string;
   role: UserRole;

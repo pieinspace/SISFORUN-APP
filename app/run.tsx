@@ -165,8 +165,8 @@ export default function TrackingScreen() {
         }
 
         try {
-            // Request Background permission if possible
-            if (Platform.OS !== 'web') {
+            // Request Background permission if possible (Android only for now to avoid iOS config issues)
+            if (Platform.OS !== 'web' && Platform.OS !== 'ios') {
                 const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
                 if (bgStatus === 'granted') {
                     await Location.startLocationUpdatesAsync('RUN_TRACKING', {

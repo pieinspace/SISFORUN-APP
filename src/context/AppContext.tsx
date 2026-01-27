@@ -1,4 +1,4 @@
-import React, { createContext, useMemo, useState } from "react";
+import React, { createContext, useEffect, useMemo, useState } from "react";
 import { LeaderboardItem, RunSession, User, UserRole } from "../types/app";
 
 type UserStats = {
@@ -28,22 +28,26 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   const [user, setUser] = useState<User | null>(null);
   const [runHistory, setRunHistory] = useState<RunSession[]>([]);
 
-  const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([
-    { id: "1", name: "Andi Pratama", nrp: "RUN-001", distanceKm: 15.2, paceMinPerKm: 5.1 },
-    { id: "2", name: "Budi Santoso", nrp: "RUN-002", distanceKm: 14.8, paceMinPerKm: 5.05 },
-    { id: "3", name: "Citra Dewi", nrp: "RUN-003", distanceKm: 14.2, paceMinPerKm: 5.2 },
-    { id: "4", name: "Dian Kusuma", nrp: "RUN-004", distanceKm: 13.9, paceMinPerKm: 5.15 },
-    { id: "5", name: "Eko Wijaya", nrp: "RUN-005", distanceKm: 13.5, paceMinPerKm: 5.25 },
-    { id: "6", name: "Fitri Handayani", nrp: "RUN-006", distanceKm: 13.2, paceMinPerKm: 5.3 },
-    { id: "7", name: "Gunawan Putra", nrp: "RUN-007", distanceKm: 12.8, paceMinPerKm: 5.35 },
-    { id: "8", name: "Hendra Saputra", nrp: "RUN-008", distanceKm: 12.5, paceMinPerKm: 5.4 },
-    { id: "9", name: "Indah Permata", nrp: "RUN-009", distanceKm: 12.1, paceMinPerKm: 5.45 },
-    { id: "10", name: "Joko Widodo", nrp: "RUN-010", distanceKm: 11.8, paceMinPerKm: 5.5 },
-    // Extra users to push list beyond 10
-    { id: "11", name: "Kartika Sari", nrp: "RUN-011", distanceKm: 10.5, paceMinPerKm: 6.0 },
-    { id: "12", name: "Lukman Hakim", nrp: "RUN-012", distanceKm: 9.2, paceMinPerKm: 6.2 },
-    { id: "13", name: "Maya Putri", nrp: "RUN-013", distanceKm: 8.5, paceMinPerKm: 6.5 },
-  ]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
+
+  // Fetch Leaderboard on mount and when logged in
+  useEffect(() => {
+    fetchLeaderboard();
+    const interval = setInterval(fetchLeaderboard, 10000); // Auto refresh every 10s
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchLeaderboard = async () => {
+    try {
+      const response = await fetch(`${API_URL}/leaderboard`);
+      if (response.ok) {
+        const data = await response.json();
+        setLeaderboard(data);
+      }
+    } catch (e) {
+      console.log("Failed to fetch leaderboard", e);
+    }
+  };
 
   const sortedLeaderboard = useMemo(() => {
     return [...leaderboard].sort((a, b) => {
@@ -68,36 +72,38 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     return { totalKm, totalRuns, avgPace };
   }, [runHistory]);
 
-  const login: AppContextValue["login"] = ({ email, password, role }) => {
-    if (!email.trim() || password.length < 6) {
-      throw new Error("Email wajib dan password minimal 6 karakter.");
-    }
+  // CHANGE THIS TO YOUR COMPUTER'S LOCAL IP (e.g., 192.168.1.5)
+  // Do not use localhost because the phone is a separate device.
+  // Based on your logs earlier: 172.28.32.93 seems to be your IP.
+  const API_URL = "http://172.28.32.93:4000/api";
 
-    const nrpFromEmail = email.split("@")[0] || "00000000";
+  const login: AppContextValue["login"] = async ({ email, password, role }) => {
+    try {
+      // NOTE: 'email' argument contains NRP from login screen input
+      // If the user typed "123456", it comes here as "123456"
+      // If they typed an email, we split it.
+      const nrp = email.includes("@") ? email.split("@")[0] : email;
 
-    const newUser = {
-      name: "User", // Can be dynamic if we had name input
-      nrp: nrpFromEmail,
-      role,
-    };
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nrp: nrp, password })
+      });
 
-    setUser(newUser);
-    setIsLoggedIn(true);
+      const data = await response.json();
 
-    // Check if user exists in leaderboard
-    const exists = leaderboard.find((l) => l.nrp === nrpFromEmail);
-    if (!exists) {
-      // Add to leaderboard with mock stats
-      setLeaderboard((prev) => [
-        ...prev,
-        {
-          id: Math.random().toString(),
-          name: "User", // Match default name
-          nrp: nrpFromEmail,
-          distanceKm: 0, // Start from 0
-          paceMinPerKm: 0,
-        },
-      ]);
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      // Backend returns { user: ... }
+      // We add role manually from selection or backend should return it
+      const newUser: User = { ...data.user, role: role }; // role from frontend selection for now
+
+      setUser(newUser);
+      setIsLoggedIn(true);
+    } catch (err: any) {
+      throw new Error(err.message);
     }
   };
 
@@ -107,40 +113,48 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     setRunHistory([]);
   };
 
-  const addRunSession = (session: RunSession) => {
-    setRunHistory((prev) => [session, ...prev]);
+  const addRunSession = async (session: RunSession) => {
+    if (!user) return;
 
-    // Also update leaderboard for current user
+    try {
+      const payload = {
+        userId: user.id || 1, // fallback if backend uses integer
+        distanceKm: session.distanceKm,
+        durationSec: session.durationSec,
+        route: session.route
+      };
+
+      const response = await fetch(`${API_URL}/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        console.error("Failed to save run to DB");
+      } else {
+        const saved = await response.json();
+        // Optionally update local history from response
+        setRunHistory((prev) => [session, ...prev]);
+      }
+    } catch (e) {
+      console.error("API Error", e);
+      // Optimistic update even if offline for now
+      setRunHistory((prev) => [session, ...prev]);
+    }
+
+    // Update leaderboard locally for UI responsiveness (or fetch fresh)
+    updateLeaderboardLocal(session);
+  };
+
+  // Helper to keep UI snappy
+  const updateLeaderboardLocal = (session: RunSession) => {
     if (user) {
       setLeaderboard((prev) => {
         return prev.map(p => {
           if (p.nrp === user.nrp) {
-            // Update exist user stats
-            // Note: simple addition logic for now. 
-            // Real logic might need recalculation if leaderboard item stores aggregate.
-            // Let's assume leaderboard item IS the aggregate.
             const newDist = p.distanceKm + session.distanceKm;
-            // update pace weighted? Or just simplistic for now:
-            // Since we don't store total time in leaderboard item, let's just average the new pace with old? 
-            // Better: use AppContext stats if we want precise. 
-            // But for leaderboard array, let's approximation or just keep it simple.
-            // Actually, best to update it based on new total.
-
-            // To do it right without extra storage in leaderboard item:
-            // We can't perfectly recalc pace without total time. 
-            // Let's just use the session pace if it's the only one, or average it.
-            // A simple moving average approximation:
-            const oldWeight = p.distanceKm; // use distance as weight
-            const newWeight = session.distanceKm;
-            const newPace =
-              ((p.paceMinPerKm * oldWeight) + ((session.durationSec / 60 / session.distanceKm) * newWeight))
-              / (oldWeight + newWeight);
-
-            return {
-              ...p,
-              distanceKm: newDist,
-              paceMinPerKm: newPace || 0
-            };
+            return { ...p, distanceKm: newDist };
           }
           return p;
         });
