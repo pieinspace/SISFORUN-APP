@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import React, { useContext, useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, {
   FadeInDown,
   FadeInUp,
@@ -123,10 +123,13 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <Animated.View entering={FadeInUp.duration(450)} style={styles.header}>
         <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>P</Text>
+          <Image
+            source={require("../../assets/images/favicon.png")}
+            style={{ width: 40, height: 40 }}
+            resizeMode="contain"
+          />
         </View>
         <Text style={styles.appName}>SISFORUN</Text>
-        <Text style={styles.sub}>Tracking Lari Profesional</Text>
       </Animated.View>
 
       <Animated.View
@@ -211,9 +214,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  logoText: { color: "white", fontWeight: "900", fontSize: 26 },
   appName: { marginTop: 10, fontSize: 18, fontWeight: "900", color: "#2E3A2E" },
-  sub: { fontSize: 12, color: "#6B776B", marginTop: 4 },
 
   cardWrap: { width: "100%", maxWidth: 420 },
   card: { width: "100%", backgroundColor: "white", borderRadius: 18, padding: 16 },
