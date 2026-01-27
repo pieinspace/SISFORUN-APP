@@ -7,30 +7,52 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 export default function LeaderboardScreen() {
   const ctx = useContext(AppContext);
 
+  /* 1. Slice to top 10 for main list */
+  const displayedList = (ctx?.leaderboard ?? []).slice(0, 10);
+
+  /* 2. Find user rank */
+  const userRankIndex = (ctx?.leaderboard ?? []).findIndex(
+    (item) => item.nrp === ctx?.user?.nrp
+  );
+  const userRank = userRankIndex + 1;
+  const userItem = userRankIndex >= 0 ? ctx?.leaderboard[userRankIndex] : null;
+
+  /* 3. Check if user is outside top 10 */
+  const showStickyFooter = userRank > 10 && userItem;
+
   return (
     <View style={styles.container}>
       <SharedHeader title="SISFORUN" subtitle="Leaderboard" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>🏆 Leaderboard</Text>
         </View>
 
-        {(ctx?.leaderboard ?? []).map((p, i) => {
+        {displayedList.map((p, i) => {
           const isFirst = i === 0;
           return (
             <Animated.View
               key={p.id}
               entering={FadeInDown.delay(80 * i).duration(350)}
-              style={[styles.row, isFirst && styles.rowFirst]}
+              style={[
+                styles.row,
+                isFirst && styles.rowFirst,
+                // Highlight user row if they ARE in top 10
+                p.nrp === ctx?.user?.nrp && styles.rowUser,
+              ]}
             >
               <View style={[styles.rankBox, isFirst && styles.rankBoxFirst]}>
                 <Text style={[styles.rank, isFirst && styles.rankFirst]}>#{i + 1}</Text>
               </View>
 
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.name}>{p.name}</Text>
-                {/* Assuming NRP is displayed logic if needed, hiding for clean look if unknown */}
+                <Text style={styles.name}>
+                  {p.name} {p.nrp === ctx?.user?.nrp ? "(You)" : ""}
+                </Text>
               </View>
 
               <View style={{ alignItems: "flex-end" }}>
@@ -41,8 +63,34 @@ export default function LeaderboardScreen() {
           );
         })}
 
-        <View style={{ height: 90 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* STICKY FOOTER */}
+      {showStickyFooter && (
+        <Animated.View entering={FadeInDown.delay(500)} style={styles.stickyFooter}>
+          <View
+            style={[
+              styles.row,
+              styles.rowUser,
+              { marginBottom: 0, shadowOpacity: 0.1 },
+            ]}
+          >
+            <View style={styles.rankBox}>
+              <Text style={styles.rank}>#{userRank}</Text>
+            </View>
+
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.name}>{userItem?.name} (You)</Text>
+            </View>
+
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={styles.km}>{userItem?.distanceKm.toFixed(1)} km</Text>
+              <Text style={styles.sub}>{userItem?.paceMinPerKm.toFixed(2)}</Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -69,7 +117,12 @@ const styles = StyleSheet.create({
   rowFirst: {
     backgroundColor: "#FFF8E1", // Gold/Beige tint for #1
     borderWidth: 1,
-    borderColor: "rgba(255, 215, 0, 0.3)"
+    borderColor: "rgba(255, 215, 0, 0.3)",
+  },
+  rowUser: {
+    borderWidth: 1,
+    borderColor: "#2E3A2E",
+    backgroundColor: "#E8EAE6",
   },
 
   rankBox: {
@@ -77,11 +130,11 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 12,
     backgroundColor: "#F3F4F1",
-    alignItems: 'center',
-    justifyContent: 'center'
+    alignItems: "center",
+    justifyContent: "center",
   },
   rankBoxFirst: {
-    backgroundColor: "#FFD700"
+    backgroundColor: "#FFD700",
   },
 
   rank: { fontWeight: "900", color: "#6B776B", fontSize: 14 },
@@ -90,4 +143,11 @@ const styles = StyleSheet.create({
   name: { fontWeight: "900", color: "#2E3A2E", fontSize: 14 },
   sub: { marginTop: 2, fontSize: 12, color: "rgba(46,58,46,0.5)", fontWeight: "700" },
   km: { fontWeight: "900", color: "#2E3A2E", fontSize: 14 },
+
+  stickyFooter: {
+    position: "absolute",
+    bottom: 20,
+    left: 16,
+    right: 16,
+  },
 });

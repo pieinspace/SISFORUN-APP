@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useState } from "react";
 import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, {
   FadeInDown,
@@ -11,13 +11,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { AppContext } from "../../src/context/AppContext";
 import type { UserRole } from "../../src/types/app";
-
-// Mock akun demo (NRP + password)
-const MOCK_ACCOUNTS = [
-  { nrp: "12345678", password: "password123" },
-  { nrp: "20231234", password: "sisforun123" },
-  { nrp: "77777777", password: "larikuat1" },
-];
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -37,11 +30,6 @@ export default function LoginScreen() {
   const shakeStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: shakeX.value }],
   }));
-
-  const demoText = useMemo(
-    () => MOCK_ACCOUNTS.map((a) => `• NRP: ${a.nrp} | Pass: ${a.password}`).join("\n"),
-    []
-  );
 
   const doShake = () => {
     shakeX.value = withSequence(
@@ -79,22 +67,6 @@ export default function LoginScreen() {
       setPassError("Password minimal 6 karakter");
       doShake();
       Alert.alert("Login gagal", "Password minimal 6 karakter");
-      return;
-    }
-
-    const found = MOCK_ACCOUNTS.find((a) => a.nrp === cleanNrp);
-    if (!found) {
-      setNrpError("NRP tidak terdaftar");
-      doShake();
-      Alert.alert("Login gagal", "NRP tidak terdaftar");
-      return;
-    }
-
-    if (found.password !== cleanPass) {
-      // ✅ INI YANG KAMU MINTA: notif password salah
-      setPassError("Password salah");
-      doShake();
-      Alert.alert("Login gagal", "Password salah");
       return;
     }
 
@@ -138,12 +110,6 @@ export default function LoginScreen() {
       >
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Masuk</Text>
-
-          <View style={styles.demoBox}>
-            <Text style={styles.demoTitle}>Akun Demo</Text>
-            <Text style={styles.demoText}>{demoText}</Text>
-          </View>
-
           <Text style={styles.label}>NRP</Text>
           <TextInput
             value={nrp}
@@ -220,10 +186,6 @@ const styles = StyleSheet.create({
   card: { width: "100%", backgroundColor: "white", borderRadius: 18, padding: 16 },
 
   cardTitle: { fontSize: 16, fontWeight: "900", color: "#2E3A2E", marginBottom: 10 },
-
-  demoBox: { backgroundColor: "#F3F4F1", borderRadius: 12, padding: 10, marginBottom: 12 },
-  demoTitle: { fontSize: 12, fontWeight: "900", color: "#2E3A2E", marginBottom: 6 },
-  demoText: { fontSize: 11, color: "#4C5A4C", fontWeight: "700", lineHeight: 16 },
 
   label: { fontSize: 12, fontWeight: "700", color: "#2E3A2E", marginBottom: 4 },
 

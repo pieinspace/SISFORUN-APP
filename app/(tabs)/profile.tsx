@@ -1,11 +1,13 @@
 import SharedHeader from "@/src/components/SharedHeader";
 import { AppContext } from "@/src/context/AppContext";
+import { formatPace } from "@/src/utils/geo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useContext, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -41,17 +43,26 @@ export default function ProfileScreen() {
   if (!ctx.isLoggedIn || !ctx.user) return null;
 
   const onLogout = () => {
-    Alert.alert("Logout", "Yakin mau keluar?", [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: () => {
-          ctx.logout();
-          router.replace("/(auth)/login");
+    // Direct logout for now to ensure button works
+    if (Platform.OS === 'web') {
+      const confirm = window.confirm("Yakin mau keluar?");
+      if (confirm) {
+        ctx.logout();
+        router.replace("/(auth)/login");
+      }
+    } else {
+      Alert.alert("Logout", "Yakin mau keluar?", [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: () => {
+            ctx.logout();
+            router.replace("/(auth)/login");
+          },
         },
-      },
-    ]);
+      ]);
+    }
   };
 
   const avatarLetter = (ctx.user.name?.[0] ?? "U").toUpperCase();
@@ -98,6 +109,8 @@ export default function ProfileScreen() {
           </View>
         </Animated.View>
 
+
+
         <Animated.View
           entering={FadeInUp.delay(120).duration(380)}
           style={styles.metrics}
@@ -106,7 +119,7 @@ export default function ProfileScreen() {
             <View style={{ marginBottom: 4 }}>
               <Ionicons name="infinite-outline" size={20} color="#6B776B" />
             </View>
-            <Text style={styles.metricVal}>156.8</Text>
+            <Text style={styles.metricVal}>{ctx.userStats?.totalKm.toFixed(1) ?? "0.0"}</Text>
             <Text style={styles.metricLab}>Total KM</Text>
           </View>
 
@@ -114,7 +127,9 @@ export default function ProfileScreen() {
             <View style={{ marginBottom: 4 }}>
               <Ionicons name="timer-outline" size={20} color="#6B776B" />
             </View>
-            <Text style={styles.metricVal}>5:25</Text>
+            <Text style={styles.metricVal}>
+              {ctx.userStats?.avgPace ? formatPace(ctx.userStats.avgPace) : "-"}
+            </Text>
             <Text style={styles.metricLab}>Avg Pace</Text>
           </View>
 
@@ -122,22 +137,13 @@ export default function ProfileScreen() {
             <View style={{ marginBottom: 4 }}>
               <Ionicons name="pulse-outline" size={20} color="#6B776B" />
             </View>
-            <Text style={styles.metricVal}>24</Text>
+            <Text style={styles.metricVal}>{ctx.userStats?.totalRuns ?? 0}</Text>
             <Text style={styles.metricLab}>Total Lari</Text>
           </View>
         </Animated.View>
 
+
         <View style={styles.divider} />
-
-        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="person-outline" size={20} color="#2E3A2E" style={{ marginRight: 10 }} />
-            <Text style={styles.menuText}>Lihat Profile</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color="#6B776B" />
-        </TouchableOpacity>
-
-        <View style={{ height: 12 }} />
 
         <TouchableOpacity style={styles.menuItem} onPress={onLogout} activeOpacity={0.7}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -149,7 +155,7 @@ export default function ProfileScreen() {
 
       {/* spacer biar aman dari tab bar */}
       <View style={{ height: 90 }} />
-    </View>
+    </View >
   );
 }
 

@@ -210,6 +210,16 @@ export default function TrackingScreen() {
                     {
                         text: "OK",
                         onPress: () => {
+                            // Save session
+                            if (ctx?.addRunSession) {
+                                ctx.addRunSession({
+                                    id: Math.random().toString(),
+                                    date: new Date().toISOString(),
+                                    distanceKm: distanceKm,
+                                    durationSec: elapsedSec,
+                                });
+                            }
+
                             // Navigate to Leaderboard after finished
                             router.dismissAll(); // Clear stack if needed, or just replace
                             router.replace("/(tabs)/leaderboard");
