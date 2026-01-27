@@ -10,6 +10,7 @@ interface SharedHeaderProps {
     centerTitle?: boolean;
     showBack?: boolean;
     rightIcons?: React.ReactNode;
+    onBackPress?: () => void;
 }
 
 export default function SharedHeader({
@@ -18,6 +19,7 @@ export default function SharedHeader({
     centerTitle = false,
     showBack = false,
     rightIcons,
+    onBackPress,
 }: SharedHeaderProps) {
     const router = useRouter();
 
@@ -37,7 +39,7 @@ export default function SharedHeader({
                     <View style={styles.sideContainer}>
                         {showBack && (
                             <TouchableOpacity
-                                onPress={() => router.back()}
+                                onPress={onBackPress || (() => router.back())}
                                 style={styles.backButton}
                                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             >

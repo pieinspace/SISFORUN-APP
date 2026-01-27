@@ -9,7 +9,17 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Aplikasi ini membutuhkan akses lokasi untuk melacak lari kamu secara akurat.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Aplikasi ini membutuhkan akses lokasi di latar belakang untuk melacak rute lari saat HP dikunci.",
+        "NSLocationAlwaysUsageDescription": "Aplikasi ini membutuhkan akses lokasi di latar belakang untuk melacak rute lari saat HP dikunci.",
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      },
+      "bundleIdentifier": "com.sisforun.app"
     },
     "android": {
       "adaptiveIcon": {

@@ -1,8 +1,11 @@
 import SharedHeader from "@/src/components/SharedHeader";
 import { AppContext } from "@/src/context/AppContext";
+import { LatLng } from "@/src/types/app";
 import { formatPace } from "@/src/utils/geo";
+import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
+import * as TaskManager from "expo-task-manager";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, {
@@ -14,7 +17,25 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated";
 
-type LatLng = { latitude: number; longitude: number; timestamp?: number };
+// Define Task for background
+const LOCATION_TASK_NAME = 'RUN_TRACKING';
+
+try {
+    TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+        if (error) {
+            // check `error.message` for details
+            return;
+        }
+        if (data) {
+            const { locations } = data as any;
+            // Background processing - in a real app store this in SQLite/AsyncStorage
+            // Here we mainly do it to keep the service alive
+            console.log('Bg loc:', locations?.length);
+        }
+    });
+} catch (e) {
+    // Task might be already defined
+}
 
 function pad2(n: number) {
     return String(n).padStart(2, "0");
@@ -133,6 +154,8 @@ export default function TrackingScreen() {
         timerRef.current = null;
     }
 
+    const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
+
     async function startTracking() {
         setError(null);
 
@@ -142,6 +165,22 @@ export default function TrackingScreen() {
         }
 
         try {
+            // Request Background permission if possible
+            if (Platform.OS !== 'web') {
+                const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+                if (bgStatus === 'granted') {
+                    await Location.startLocationUpdatesAsync('RUN_TRACKING', {
+                        accuracy: Location.Accuracy.BestForNavigation,
+                        timeInterval: 1000,
+                        distanceInterval: 5,
+                        foregroundService: {
+                            notificationTitle: "SisfoRun Tracking",
+                            notificationBody: "Tracking lari sedang berjalan...",
+                        }
+                    });
+                }
+            }
+
             setIsTracking(true);
             startTimer();
 
@@ -154,6 +193,7 @@ export default function TrackingScreen() {
                 longitude: initial.coords.longitude,
                 timestamp: initial.timestamp,
             };
+            setRouteCoords([p0]);
             setLastPoint(p0);
 
             const sub = await Location.watchPositionAsync(
@@ -170,12 +210,17 @@ export default function TrackingScreen() {
                     };
 
                     setLastPoint((prev) => {
-                        if (!prev) return p;
-
-                        const dKm = haversineKm(prev, p);
-                        if (dKm > 0.2) return p;
-
-                        setDistanceKm((dkm) => dkm + dKm);
+                        // Only add if moving
+                        // If prev exists, calc distance
+                        if (prev) {
+                            const dKm = haversineKm(prev, p);
+                            if (dKm > 0.005) { // 5 meters threshold
+                                setDistanceKm((d) => d + dKm);
+                                setRouteCoords(prevRoute => [...prevRoute, p]);
+                                return p;
+                            }
+                            return prev;
+                        }
                         return p;
                     });
                 }
@@ -201,43 +246,80 @@ export default function TrackingScreen() {
     }
 
     function stopTracking() {
+        // Just stop updates, stay on screen
         stopTrackingInternal();
-        if (distanceKm > 0.01) {
-            Alert.alert(
-                "Sesi selesai",
-                `Jarak: ${distanceKm.toFixed(2)} km\nWaktu: ${formatTime(elapsedSec)}`,
-                [
-                    {
-                        text: "OK",
-                        onPress: () => {
-                            // Save session
-                            if (ctx?.addRunSession) {
-                                ctx.addRunSession({
-                                    id: Math.random().toString(),
-                                    date: new Date().toISOString(),
-                                    distanceKm: distanceKm,
-                                    durationSec: elapsedSec,
-                                });
-                            }
+    }
 
-                            // Navigate to Leaderboard after finished
-                            router.dismissAll(); // Clear stack if needed, or just replace
-                            router.replace("/(tabs)/leaderboard");
-                        }
-                    }
-                ]
-            );
+    function onBackPress() {
+        if (distanceKm > 0.01 && !isTracking) {
+            // If stopped and has distance -> Save & Go to Summary
+            if (ctx?.addRunSession) {
+                const newSessionId = Math.random().toString();
+                ctx.addRunSession({
+                    id: newSessionId,
+                    date: new Date().toISOString(),
+                    distanceKm: distanceKm,
+                    durationSec: elapsedSec,
+                    route: routeCoords
+                });
+
+                router.replace({
+                    pathname: "/run-summary",
+                    params: { sessionId: newSessionId }
+                });
+            } else {
+                router.back();
+            }
+        } else if (isTracking) {
+            // If currently tracking, warn user or just go back (which usually means cancel)
+            // For now let's just stop and go back/cancel
+            stopTrackingInternal();
+            router.back();
         } else {
-            // Just stop without alert if distance is 0
+            // Not tracking, no distance -> just go back
             router.back();
         }
     }
 
-    const primaryLabel = isTracking ? "TAP UNTUK STOP" : "TAP UNTUK MULAI LARI";
+    function resetTracking() {
+        const resetAction = () => {
+            stopTrackingInternal();
+            setDistanceKm(0);
+            setElapsedSec(0);
+            setRouteCoords([]);
+            setLastPoint(null);
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm("Reset Lari? Progress saat ini akan dihapus dan tidak disimpan.")) {
+                resetAction();
+            }
+        } else {
+            Alert.alert(
+                "Reset Lari?",
+                "Progress saat ini akan dihapus dan tidak disimpan.",
+                [
+                    { text: "Batal", style: "cancel" },
+                    {
+                        text: "Reset",
+                        style: "destructive",
+                        onPress: resetAction
+                    }
+                ]
+            );
+        }
+    }
+
+
 
     return (
         <View style={styles.container}>
-            <SharedHeader title="Tracking Lari" centerTitle={true} showBack={true} />
+            <SharedHeader
+                title="Tracking Lari"
+                centerTitle={true}
+                showBack={true}
+                onBackPress={onBackPress}
+            />
 
             <View style={styles.content}>
 
@@ -294,14 +376,38 @@ export default function TrackingScreen() {
 
             {/* Bottom Action Area */}
             <Animated.View entering={FadeInUp.duration(520)} style={styles.bottomArea}>
-                <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={isTracking ? stopTracking : startTracking}
-                    style={styles.playButtonLarge}
-                >
-                    <Text style={styles.playIcon}>▶</Text>
-                </TouchableOpacity>
-                <Text style={styles.actionPrompt}>{primaryLabel}</Text>
+                {!isTracking ? (
+                    <>
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={startTracking}
+                            style={styles.playButtonLarge}
+                        >
+                            <Ionicons name="play" size={36} color="white" style={{ marginLeft: 6 }} />
+                        </TouchableOpacity>
+                        <Text style={styles.actionPrompt}>TAP UNTUK MULAI LARI</Text>
+                    </>
+                ) : (
+                    <View style={styles.controlsRow}>
+                        {/* Reset Button */}
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={resetTracking}
+                            style={styles.resetButton}
+                        >
+                            <Ionicons name="refresh" size={28} color="white" />
+                        </TouchableOpacity>
+
+                        {/* Stop/Finish Button */}
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={stopTracking}
+                            style={styles.stopButton}
+                        >
+                            <Ionicons name="stop" size={32} color="white" />
+                        </TouchableOpacity>
+                    </View>
+                )}
             </Animated.View>
         </View>
     );
@@ -375,15 +481,42 @@ const styles = StyleSheet.create({
         elevation: 8,
         marginBottom: 16
     },
-    playIcon: {
-        color: "#FFFFFF",
-        fontSize: 32,
-        marginLeft: 4 // Visual correction for play icon center
+    controlsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 20
+    },
+    resetButton: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: "#E57373", // Soft Red
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: "#E57373",
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+    },
+    stopButton: {
+        width: 84,
+        height: 84,
+        borderRadius: 42,
+        backgroundColor: "#D32F2F", // Strong Red
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: "#D32F2F",
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
     },
     actionPrompt: {
         fontSize: 12,
         fontWeight: "800",
         letterSpacing: 1.5,
-        color: "#6B776B"
+        color: "#6B776B",
+        marginTop: 16
     }
 });

@@ -14,9 +14,16 @@ export type LeaderboardItem = {
   paceMinPerKm: number;
 };
 
+export type LatLng = {
+  latitude: number;
+  longitude: number;
+  timestamp?: number;
+};
+
 export type RunSession = {
   id: string;
   date: string; // ISO string
   distanceKm: number;
   durationSec: number;
+  route?: LatLng[];
 };
