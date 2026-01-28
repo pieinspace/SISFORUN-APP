@@ -1,5 +1,5 @@
 import React, { createContext, useEffect, useMemo, useState } from "react";
-import { LeaderboardItem, RunSession, User, UserRole } from "../types/app";
+import { LeaderboardItem, RunSession, User } from "../types/app";
 
 type UserStats = {
   totalKm: number;
@@ -16,27 +16,27 @@ type AppContextValue = {
   runHistory: RunSession[];
   userStats: UserStats;
 
-  login: (payload: { email: string; password: string; role: UserRole }) => void;
+  login: (payload: { nrp: string; password: string }) => Promise<void>;
   logout: () => void;
-  addRunSession: (session: RunSession) => void;
+  addRunSession: (session: RunSession) => Promise<void>;
 };
 
 export const AppContext = createContext<AppContextValue | null>(null);
 
 export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  // ✅ GANTI IP ini sesuai IP laptop/PC kamu (yang satu WiFi dengan HP)
+  // contoh: http://192.168.1.5:4000/api
+  const API_URL = "http://172.28.32.91:4000/api";
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [runHistory, setRunHistory] = useState<RunSession[]>([]);
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
+  const [runHistory, setRunHistory] = useState<RunSession[]>([]);
 
-  // Fetch Leaderboard on mount and when logged in
-  useEffect(() => {
-    fetchLeaderboard();
-    const interval = setInterval(fetchLeaderboard, 10000); // Auto refresh every 10s
-    return () => clearInterval(interval);
-  }, []);
-
+  // =========================
+  // LEADERBOARD
+  // =========================
   const fetchLeaderboard = async () => {
     try {
       const response = await fetch(`${API_URL}/leaderboard`);
@@ -49,6 +49,13 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     }
   };
 
+  useEffect(() => {
+    fetchLeaderboard();
+    const interval = setInterval(fetchLeaderboard, 10000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const sortedLeaderboard = useMemo(() => {
     return [...leaderboard].sort((a, b) => {
       if (b.distanceKm !== a.distanceKm) return b.distanceKm - a.distanceKm;
@@ -56,52 +63,59 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     });
   }, [leaderboard]);
 
+  // =========================
+  // TARGET KM (role dari backend)
+  // ASN: 10 km, MILITER: 14 km
+  // =========================
   const targetKm = user?.role === "asn" ? 10 : 14;
 
+  // =========================
+  // USER STATS (dari runHistory lokal)
+  // =========================
   const userStats = useMemo<UserStats>(() => {
     const totalRuns = runHistory.length;
     const totalKm = runHistory.reduce((acc, curr) => acc + curr.distanceKm, 0);
     const totalDurSec = runHistory.reduce((acc, curr) => acc + curr.durationSec, 0);
 
-    // avg pace = total minutes / total km
     let avgPace = 0;
-    if (totalKm > 0) {
+    if (totalKm > 0) Fletcher: {
       avgPace = (totalDurSec / 60) / totalKm;
     }
 
     return { totalKm, totalRuns, avgPace };
   }, [runHistory]);
 
-  // CHANGE THIS TO YOUR COMPUTER'S LOCAL IP (e.g., 192.168.1.5)
-  // Do not use localhost because the phone is a separate device.
-  // Based on your logs earlier: 172.28.32.93 seems to be your IP.
-  const API_URL = "http://172.28.32.93:4000/api";
-
-  const login: AppContextValue["login"] = async ({ email, password, role }) => {
+  // =========================
+  // LOGIN
+  // =========================
+  const login: AppContextValue["login"] = async ({ nrp, password }) => {
     try {
-      // NOTE: 'email' argument contains NRP from login screen input
-      // If the user typed "123456", it comes here as "123456"
-      // If they typed an email, we split it.
-      const nrp = email.includes("@") ? email.split("@")[0] : email;
+      const cleanedNrp = String(nrp).trim();
 
       const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nrp: nrp, password })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nrp: cleanedNrp, password }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.error || "Login failed");
       }
 
-      // Backend returns { user: ... }
-      // We add role manually from selection or backend should return it
-      const newUser: User = { ...data.user, role: role }; // role from frontend selection for now
+      // Backend harus return: { user: { id, nrp, role } }
+      const backendUser = data.user as User;
 
-      setUser(newUser);
+      if (!backendUser?.id || !backendUser?.nrp || !backendUser?.role) {
+        throw new Error("Response login tidak lengkap (id/nrp/role).");
+      }
+
+      setUser(backendUser);
       setIsLoggedIn(true);
+
+      // optional: refresh leaderboard sekali setelah login
+      fetchLeaderboard();
     } catch (err: any) {
       throw new Error(err.message);
     }
@@ -113,52 +127,52 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     setRunHistory([]);
   };
 
-  const addRunSession = async (session: RunSession) => {
+  // =========================
+  // RUNS
+  // =========================
+  const updateLeaderboardLocal = (session: RunSession) => {
     if (!user) return;
+
+    setLeaderboard((prev) => {
+      return prev.map((p) => {
+        if (p.nrp === user.nrp) {
+          const newDist = p.distanceKm + session.distanceKm;
+          return { ...p, distanceKm: newDist };
+        }
+        return p;
+      });
+    });
+  };
+
+  const addRunSession: AppContextValue["addRunSession"] = async (session) => {
+    if (!user) return;
+
+    // Optimistic update biar UI langsung update
+    setRunHistory((prev) => [session, ...prev]);
+    updateLeaderboardLocal(session);
 
     try {
       const payload = {
-        userId: user.id || 1, // fallback if backend uses integer
+        userId: user.id,
         distanceKm: session.distanceKm,
         durationSec: session.durationSec,
-        route: session.route
+        route: session.route,
       };
 
       const response = await fetch(`${API_URL}/runs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         console.error("Failed to save run to DB");
       } else {
-        const saved = await response.json();
-        // Optionally update local history from response
-        setRunHistory((prev) => [session, ...prev]);
+        await response.json();
       }
     } catch (e) {
       console.error("API Error", e);
-      // Optimistic update even if offline for now
-      setRunHistory((prev) => [session, ...prev]);
-    }
-
-    // Update leaderboard locally for UI responsiveness (or fetch fresh)
-    updateLeaderboardLocal(session);
-  };
-
-  // Helper to keep UI snappy
-  const updateLeaderboardLocal = (session: RunSession) => {
-    if (user) {
-      setLeaderboard((prev) => {
-        return prev.map(p => {
-          if (p.nrp === user.nrp) {
-            const newDist = p.distanceKm + session.distanceKm;
-            return { ...p, distanceKm: newDist };
-          }
-          return p;
-        });
-      });
+      // kalau offline, data lokal sudah tetap tersimpan di state (runHistory)
     }
   };
 

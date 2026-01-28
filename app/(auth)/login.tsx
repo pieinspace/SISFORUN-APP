@@ -10,7 +10,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { AppContext } from "../../src/context/AppContext";
-import type { UserRole } from "../../src/types/app";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -18,11 +17,13 @@ export default function LoginScreen() {
 
   const [nrp, setNrp] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("militer");
 
-  // untuk notif inline
+  // notif inline
   const [nrpError, setNrpError] = useState<string | null>(null);
   const [passError, setPassError] = useState<string | null>(null);
+
+  // loading state biar gak double klik
+  const [loading, setLoading] = useState(false);
 
   // animasi shake
   const shakeX = useSharedValue(0);
@@ -41,13 +42,14 @@ export default function LoginScreen() {
     );
   };
 
-  const onLogin = () => {
+  const onLogin = async () => {
     const cleanNrp = nrp.trim();
     const cleanPass = password;
 
     setNrpError(null);
     setPassError(null);
 
+    // validasi basic
     if (!cleanNrp || !cleanPass) {
       if (!cleanNrp) setNrpError("NRP wajib diisi");
       if (!cleanPass) setPassError("Password wajib diisi");
@@ -75,19 +77,19 @@ export default function LoginScreen() {
       return;
     }
 
-    const payload = {
-      email: `${cleanNrp}@sisforun.local`,
-      password: cleanPass,
-      role: role,
-    };
-
     try {
-      ctx.login(payload);
+      setLoading(true);
+
+      // ✅ role diambil dari backend (DB), bukan dari pilihan user
+      await ctx.login({ nrp: cleanNrp, password: cleanPass });
+
       Alert.alert("Login berhasil", "Selamat datang!");
       router.replace("/(tabs)/profile");
     } catch (e: any) {
       doShake();
       Alert.alert("Login gagal", e?.message ?? "Terjadi kesalahan saat login.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -104,12 +106,10 @@ export default function LoginScreen() {
         <Text style={styles.appName}>SISFORUN</Text>
       </Animated.View>
 
-      <Animated.View
-        entering={FadeInDown.duration(500)}
-        style={[styles.cardWrap, shakeStyle]}
-      >
+      <Animated.View entering={FadeInDown.duration(500)} style={[styles.cardWrap, shakeStyle]}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Masuk</Text>
+
           <Text style={styles.label}>NRP</Text>
           <TextInput
             value={nrp}
@@ -120,6 +120,7 @@ export default function LoginScreen() {
             placeholder="Masukkan NRP"
             keyboardType="numeric"
             style={[styles.input, nrpError ? styles.inputError : null]}
+            editable={!loading}
           />
           {!!nrpError && <Text style={styles.errorInline}>{nrpError}</Text>}
 
@@ -133,27 +134,17 @@ export default function LoginScreen() {
             placeholder="Minimal 6 karakter"
             secureTextEntry
             style={[styles.input, passError ? styles.inputError : null]}
+            editable={!loading}
           />
           {!!passError && <Text style={styles.errorInline}>{passError}</Text>}
 
-          <Text style={[styles.label, { marginTop: 14 }]}>Role</Text>
-          <View style={styles.roleContainer}>
-            <TouchableOpacity
-              style={[styles.roleBtn, role === 'militer' && styles.roleBtnActive]}
-              onPress={() => setRole('militer')}
-            >
-              <Text style={[styles.roleText, role === 'militer' && styles.roleTextActive]}>Militer</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.roleBtn, role === 'asn' && styles.roleBtnActive]}
-              onPress={() => setRole('asn')}
-            >
-              <Text style={[styles.roleText, role === 'asn' && styles.roleTextActive]}>ASN</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.btn} onPress={onLogin} activeOpacity={0.9}>
-            <Text style={styles.btnText}>Masuk →</Text>
+          <TouchableOpacity
+            style={[styles.btn, loading ? styles.btnDisabled : null]}
+            onPress={onLogin}
+            activeOpacity={0.9}
+            disabled={loading}
+          >
+            <Text style={styles.btnText}>{loading ? "Memproses..." : "Masuk →"}</Text>
           </TouchableOpacity>
 
           <Text style={styles.terms}>Dengan masuk, Anda menyetujui syarat & ketentuan SISFORUN</Text>
@@ -201,29 +192,15 @@ const styles = StyleSheet.create({
   inputError: { borderColor: "#B00020" },
   errorInline: { marginTop: 6, fontSize: 12, color: "#B00020", fontWeight: "700" },
 
-  roleContainer: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  roleBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: '#FAFAFA',
-  },
-  roleBtnActive: {
-    borderColor: '#2E3A2E',
-    backgroundColor: '#E8EAE6',
-  },
-  roleText: { fontSize: 13, fontWeight: '700', color: '#6B776B' },
-  roleTextActive: { color: '#2E3A2E' },
-
   btn: {
     backgroundColor: "#2E3A2E",
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",
     marginTop: 14,
+  },
+  btnDisabled: {
+    opacity: 0.7,
   },
   btnText: { color: "white", fontWeight: "800", fontSize: 14 },
 
