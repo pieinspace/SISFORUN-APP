@@ -11,14 +11,17 @@ type AppContextValue = {
   isLoggedIn: boolean;
   user: User | null;
   targetKm: number;
+  weeklyDistanceKm: number; // Total jarak minggu ini
+  allTimeStats: UserStats; // Stats all-time (tidak pernah reset)
 
   leaderboard: LeaderboardItem[];
   runHistory: RunSession[];
-  userStats: UserStats;
+  userStats: UserStats; // Alias ke allTimeStats untuk backward compat
 
   login: (payload: { nrp: string; password: string }) => Promise<void>;
   logout: () => void;
   addRunSession: (session: RunSession) => Promise<void>;
+  refreshWeeklyStats: () => Promise<void>;
 };
 
 export const AppContext = createContext<AppContextValue | null>(null);
@@ -30,9 +33,43 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [weeklyDistanceKm, setWeeklyDistanceKm] = useState(0);
+  const [allTimeStats, setAllTimeStats] = useState<UserStats>({ totalKm: 0, totalRuns: 0, avgPace: 0 });
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
   const [runHistory, setRunHistory] = useState<RunSession[]>([]);
+
+  // =========================
+  // ALL-TIME STATS (tidak pernah reset)
+  // =========================
+  const fetchAllTimeStats = async (userId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/alltime-stats/${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAllTimeStats(data);
+        console.log('All-time stats loaded:', data);
+      }
+    } catch (e) {
+      console.log("Failed to fetch all-time stats", e);
+    }
+  };
+
+  // =========================
+  // WEEKLY STATS
+  // =========================
+  const fetchWeeklyStats = async (userId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/weekly-stats/${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setWeeklyDistanceKm(data.weeklyDistanceKm);
+        console.log('Weekly stats loaded:', data.weeklyDistanceKm, 'km this week');
+      }
+    } catch (e) {
+      console.log("Failed to fetch weekly stats", e);
+    }
+  };
 
   // =========================
   // LEADERBOARD
@@ -70,24 +107,29 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   const targetKm = user?.role === "asn" ? 10 : 14;
 
   // =========================
-  // USER STATS (dari runHistory lokal)
+  // USER STATS (Sekarang diambil dari backend All-Time)
   // =========================
   const userStats = useMemo<UserStats>(() => {
-    const totalRuns = runHistory.length;
-    const totalKm = runHistory.reduce((acc, curr) => acc + curr.distanceKm, 0);
-    const totalDurSec = runHistory.reduce((acc, curr) => acc + curr.durationSec, 0);
-
-    let avgPace = 0;
-    if (totalKm > 0) Fletcher: {
-      avgPace = (totalDurSec / 60) / totalKm;
-    }
-
-    return { totalKm, totalRuns, avgPace };
-  }, [runHistory]);
+    return allTimeStats;
+  }, [allTimeStats]);
 
   // =========================
   // LOGIN
   // =========================
+
+  const fetchRunHistory = async (userId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/runs/${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setRunHistory(data);
+        console.log('Run history loaded:', data.length, 'sessions');
+      }
+    } catch (e) {
+      console.log("Failed to fetch run history", e);
+    }
+  };
+
   const login: AppContextValue["login"] = async ({ nrp, password }) => {
     try {
       const cleanedNrp = String(nrp).trim();
@@ -104,7 +146,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
         throw new Error(data.error || "Login failed");
       }
 
-      // Backend harus return: { user: { id, nrp, role } }
+      // Backend harus return: { user: { id, nrp, role, name } }
       const backendUser = data.user as User;
 
       if (!backendUser?.id || !backendUser?.nrp || !backendUser?.role) {
@@ -114,10 +156,20 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
       setUser(backendUser);
       setIsLoggedIn(true);
 
-      // optional: refresh leaderboard sekali setelah login
+      // Refresh leaderboard, riwayat lari, weekly stats, dan all-time stats
       fetchLeaderboard();
+      fetchRunHistory(String(backendUser.id));
+      fetchWeeklyStats(String(backendUser.id));
+      fetchAllTimeStats(String(backendUser.id));
     } catch (err: any) {
       throw new Error(err.message);
+    }
+  };
+
+  const refreshWeeklyStats = async () => {
+    if (user) {
+      await fetchWeeklyStats(String(user.id));
+      await fetchAllTimeStats(String(user.id));
     }
   };
 
@@ -125,6 +177,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     setIsLoggedIn(false);
     setUser(null);
     setRunHistory([]);
+    setWeeklyDistanceKm(0);
   };
 
   // =========================
@@ -147,6 +200,11 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   const addRunSession: AppContextValue["addRunSession"] = async (session) => {
     if (!user) return;
 
+    console.log('=== SAVING RUN SESSION ===');
+    console.log('Distance:', session.distanceKm, 'km');
+    console.log('Duration:', session.durationSec, 'sec');
+    console.log('Route points:', session.route?.length || 0);
+
     // Optimistic update biar UI langsung update
     setRunHistory((prev) => [session, ...prev]);
     updateLeaderboardLocal(session);
@@ -159,6 +217,8 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
         route: session.route,
       };
 
+      console.log('Sending to backend:', JSON.stringify(payload).substring(0, 200));
+
       const response = await fetch(`${API_URL}/runs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,13 +226,17 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
       });
 
       if (!response.ok) {
-        console.error("Failed to save run to DB");
+        console.error("Failed to save run to DB:", response.status);
       } else {
-        await response.json();
+        const result = await response.json();
+        console.log('Run saved successfully:', result);
+
+        // Refresh stats dari backend agar data akurat
+        fetchAllTimeStats(String(user.id));
+        fetchWeeklyStats(String(user.id));
       }
     } catch (e) {
-      console.error("API Error", e);
-      // kalau offline, data lokal sudah tetap tersimpan di state (runHistory)
+      console.log("API Error", e);
     }
   };
 
@@ -181,14 +245,17 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
       isLoggedIn,
       user,
       targetKm,
+      weeklyDistanceKm,
+      allTimeStats,
       leaderboard: sortedLeaderboard,
       runHistory,
       userStats,
       login,
       logout,
       addRunSession,
+      refreshWeeklyStats,
     }),
-    [isLoggedIn, user, targetKm, sortedLeaderboard, runHistory, userStats]
+    [isLoggedIn, user, targetKm, weeklyDistanceKm, allTimeStats, sortedLeaderboard, runHistory, userStats]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

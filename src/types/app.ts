@@ -1,10 +1,12 @@
 export type UserRole = "militer" | "asn";
 
 export type User = {
-  id?: string | number; // Added to support backend ID
+  id?: string | number;
   name: string;
   nrp: string;
   role: UserRole;
+  pangkat?: string;
+  kesatuan?: string;
 };
 
 export type LeaderboardItem = {

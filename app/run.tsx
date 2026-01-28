@@ -68,11 +68,12 @@ export default function TrackingScreen() {
     const router = useRouter();
     const ctx = React.useContext(AppContext);
     const TARGET_KM = ctx?.targetKm ?? 14;
+    const weeklyDistanceKm = ctx?.weeklyDistanceKm ?? 0;
 
     const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
     const [isTracking, setIsTracking] = useState(false);
 
-    const [distanceKm, setDistanceKm] = useState(0);
+    const [distanceKm, setDistanceKm] = useState(0); // Jarak sesi ini
     const [elapsedSec, setElapsedSec] = useState(0);
 
     const [, setLastPoint] = useState<LatLng | null>(null);
@@ -101,12 +102,15 @@ export default function TrackingScreen() {
         return minutes / distanceKm;
     }, [elapsedSec, distanceKm]);
 
+    // Progress mingguan: weekly distance + sesi ini
+    const totalWeeklyKm = weeklyDistanceKm + distanceKm;
+
     const progress = useMemo(() => {
         if (TARGET_KM <= 0) return 0;
-        return Math.max(0, Math.min(1, distanceKm / TARGET_KM));
-    }, [distanceKm, TARGET_KM]);
+        return Math.max(0, Math.min(1, totalWeeklyKm / TARGET_KM));
+    }, [totalWeeklyKm, TARGET_KM]);
 
-    const remainingKm = Math.max(0, TARGET_KM - distanceKm);
+    const remainingKm = Math.max(0, TARGET_KM - totalWeeklyKm);
 
     // bump saat jarak berubah
     useEffect(() => {
@@ -158,6 +162,9 @@ export default function TrackingScreen() {
 
     async function startTracking() {
         setError(null);
+        console.log('=== START TRACKING PRESSED ===');
+        console.log('Permission granted:', permissionGranted);
+        console.log('Platform:', Platform.OS);
 
         if (permissionGranted === false) {
             Alert.alert("Izin lokasi dibutuhkan", "Aktifkan izin lokasi agar tracking bisa jalan.");
@@ -167,7 +174,9 @@ export default function TrackingScreen() {
         try {
             // Request Background permission if possible (Android only for now to avoid iOS config issues)
             if (Platform.OS !== 'web' && Platform.OS !== 'ios') {
+                console.log('Requesting background permission...');
                 const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+                console.log('Background permission status:', bgStatus);
                 if (bgStatus === 'granted') {
                     await Location.startLocationUpdatesAsync('RUN_TRACKING', {
                         accuracy: Location.Accuracy.BestForNavigation,
@@ -183,9 +192,16 @@ export default function TrackingScreen() {
 
             setIsTracking(true);
             startTimer();
+            console.log('Timer started, getting initial position...');
 
             const initial = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.High,
+                accuracy: Location.Accuracy.BestForNavigation,
+            });
+
+            console.log('Initial position received:', {
+                lat: initial.coords.latitude.toFixed(6),
+                lon: initial.coords.longitude.toFixed(6),
+                accuracy: initial.coords.accuracy
             });
 
             const p0: LatLng = {
@@ -196,25 +212,50 @@ export default function TrackingScreen() {
             setRouteCoords([p0]);
             setLastPoint(p0);
 
+            console.log('Starting location watch...');
+
             const sub = await Location.watchPositionAsync(
                 {
-                    accuracy: Location.Accuracy.High,
-                    timeInterval: 1000,
-                    distanceInterval: 3,
+                    accuracy: Location.Accuracy.BestForNavigation,
+                    timeInterval: 1000,      // Update setiap 1 detik
+                    distanceInterval: 3,     // Update setiap 3 meter
                 },
                 (pos) => {
+                    const gpsAccuracy = pos.coords.accuracy ?? 999;
+
+                    // FILTER: Abaikan GPS dengan akurasi buruk (> 25 meter)
+                    if (gpsAccuracy > 25) {
+                        console.log('⚠️ GPS accuracy poor:', gpsAccuracy.toFixed(1), 'm - SKIPPED');
+                        return;
+                    }
+
                     const p: LatLng = {
                         latitude: pos.coords.latitude,
                         longitude: pos.coords.longitude,
                         timestamp: pos.timestamp,
                     };
 
+                    console.log('GPS Update:', {
+                        lat: p.latitude.toFixed(6),
+                        lon: p.longitude.toFixed(6),
+                        accuracy: gpsAccuracy.toFixed(1)
+                    });
+
                     setLastPoint((prev) => {
-                        // Only add if moving
-                        // If prev exists, calc distance
                         if (prev) {
                             const dKm = haversineKm(prev, p);
-                            if (dKm > 0.005) { // 5 meters threshold
+
+                            // FILTER: Abaikan lompatan GPS yang tidak masuk akal (> 100m dalam 1 detik = > 360 km/h)
+                            if (dKm > 0.1) {
+                                console.log('⚠️ GPS jump detected:', (dKm * 1000).toFixed(1), 'm - SKIPPED');
+                                return prev;
+                            }
+
+                            console.log('Distance from last point:', (dKm * 1000).toFixed(1), 'meters');
+
+                            // Threshold 3 meter untuk konsistensi
+                            if (dKm > 0.003) {
+                                console.log('✓ Movement detected! Adding', (dKm * 1000).toFixed(1), 'm');
                                 setDistanceKm((d) => d + dKm);
                                 setRouteCoords(prevRoute => [...prevRoute, p]);
                                 return p;
@@ -346,25 +387,41 @@ export default function TrackingScreen() {
                     </View>
                 </Animated.View>
 
-                {/* Target Card */}
-                <Animated.View entering={FadeInDown.duration(520)} style={styles.targetCard}>
-                    <View style={styles.targetRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text style={styles.targetIcon}>◎</Text>
-                            <Text style={styles.targetTitle}> Target {TARGET_KM} KM</Text>
+                {/* Target Card - Weekly Progress (Tap untuk lihat riwayat) */}
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => router.push("/history")}
+                >
+                    <Animated.View entering={FadeInDown.duration(520)} style={styles.targetCard}>
+                        <View style={styles.targetRow}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={styles.targetIcon}>◎</Text>
+                                <Text style={styles.targetTitle}> Target Mingguan {TARGET_KM} KM</Text>
+                            </View>
+                            <Text style={styles.targetPct}>{Math.round(progress * 100)}%</Text>
                         </View>
-                        <Text style={styles.targetPct}>{Math.round(progress * 100)}%</Text>
-                    </View>
 
-                    <View
-                        style={styles.progressTrack}
-                        onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
-                    >
-                        <Animated.View style={[styles.progressFill, barStyle]} />
-                    </View>
+                        <View
+                            style={styles.progressTrack}
+                            onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+                        >
+                            <Animated.View style={[styles.progressFill, barStyle]} />
+                        </View>
 
-                    <Text style={styles.targetHint}>{remainingKm.toFixed(2)} km lagi menuju target</Text>
-                </Animated.View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
+                            <Text style={styles.targetHint}>
+                                Minggu ini: {totalWeeklyKm.toFixed(2)} km
+                            </Text>
+                            <Text style={styles.targetHint}>
+                                {remainingKm > 0 ? `${remainingKm.toFixed(2)} km lagi` : '✓ Target tercapai!'}
+                            </Text>
+                        </View>
+
+                        <Text style={[styles.targetHint, { textAlign: 'center', marginTop: 8, color: '#6B8B6B' }]}>
+                            Tap untuk lihat riwayat →
+                        </Text>
+                    </Animated.View>
+                </TouchableOpacity>
 
                 {!!error && (
                     <View style={styles.errorBox}>

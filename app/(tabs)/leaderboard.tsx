@@ -1,70 +1,122 @@
 import SharedHeader from "@/src/components/SharedHeader";
 import { AppContext } from "@/src/context/AppContext";
-import React, { useContext } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
+import { useRouter } from "expo-router";
+import React, { useCallback, useContext, useEffect, useState } from "react";
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
 export default function LeaderboardScreen() {
   const ctx = useContext(AppContext);
+  const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(10);
+  const [locPermission, setLocPermission] = useState<boolean | null>(null);
 
-  /* 1. Slice to top 10 for main list */
-  const displayedList = (ctx?.leaderboard ?? []).slice(0, 10);
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      setLocPermission(status === 'granted');
+    })();
+  }, []);
+
+  const leaderboardData = ctx?.leaderboard ?? [];
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // ctx asumsikan punya fungsi untuk refresh manual atau kita panggil fetchLeaderboard jika ada di ctx
+    // Untuk sekarang kita asumsikan fetch berkelanjutan sudah jalan, tapi kita bisa trigger manual jika ada.
+    // Karena fetchLeaderboard tidak di-expose di AppContextValue, kita tunggu intervalnya atau tambahkan ke ctx.
+
+    // Simulasi loading sebentar
+    setTimeout(() => setRefreshing(false), 1000);
+  }, []);
+
+  const loadMore = () => {
+    if (visibleLimit < leaderboardData.length) {
+      setVisibleLimit(prev => prev + 10);
+    }
+  };
+
+  /* 1. Slice based on dynamic limit */
+  const displayedList = leaderboardData.slice(0, visibleLimit);
 
   /* 2. Find user rank */
-  const userRankIndex = (ctx?.leaderboard ?? []).findIndex(
+  const userRankIndex = leaderboardData.findIndex(
     (item) => item.nrp === ctx?.user?.nrp
   );
   const userRank = userRankIndex + 1;
-  const userItem = userRankIndex >= 0 ? ctx?.leaderboard[userRankIndex] : null;
+  const userItem = userRankIndex >= 0 ? leaderboardData[userRankIndex] : null;
 
-  /* 3. Check if user is outside top 10 */
-  const showStickyFooter = userRank > 10 && userItem;
+  /* 3. Check if user is outside visible or top 10 */
+  const showStickyFooter = userRank > visibleLimit && userItem;
+
+  const renderItem = ({ item, index }: { item: typeof leaderboardData[0], index: number }) => {
+    const isFirst = index === 0;
+    const isUser = item.nrp === ctx?.user?.nrp;
+
+    return (
+      <Animated.View
+        entering={FadeInDown.delay(index < 10 ? 80 * index : 0).duration(350)}
+        style={[
+          styles.row,
+          isFirst && styles.rowFirst,
+          isUser && styles.rowUser,
+        ]}
+      >
+        <View style={[styles.rankBox, isFirst && styles.rankBoxFirst]}>
+          <Text style={[styles.rank, isFirst && styles.rankFirst]}>#{index + 1}</Text>
+        </View>
+
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.name}>
+            {item.name} {isUser ? "(You)" : ""}
+          </Text>
+        </View>
+
+        <View style={{ alignItems: "flex-end" }}>
+          <Text style={styles.km}>{item.distanceKm.toFixed(1)} km</Text>
+          <Text style={styles.sub}>{item.paceMinPerKm.toFixed(2)}</Text>
+        </View>
+      </Animated.View>
+    );
+  };
+
+  const CustomRightIcons = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <View style={styles.toggleContainer}>
+        <Ionicons name="location-outline" size={14} color="#6B776B" style={{ marginRight: 4 }} />
+        <View style={[styles.dot, { backgroundColor: locPermission ? '#4CAF50' : '#B00020' }]} />
+      </View>
+      <TouchableOpacity onPress={() => router.push("/settings")}>
+        <Ionicons name="settings-outline" size={24} color="#2E3A2E" />
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
-      <SharedHeader title="SISFORUN" subtitle="Leaderboard" />
+      <SharedHeader title="SISFORUN" subtitle="Leaderboard" rightIcons={CustomRightIcons} />
 
-      <ScrollView
+      <FlatList
+        data={displayedList}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>🏆 Leaderboard</Text>
-        </View>
-
-        {displayedList.map((p, i) => {
-          const isFirst = i === 0;
-          return (
-            <Animated.View
-              key={p.id}
-              entering={FadeInDown.delay(80 * i).duration(350)}
-              style={[
-                styles.row,
-                isFirst && styles.rowFirst,
-                // Highlight user row if they ARE in top 10
-                p.nrp === ctx?.user?.nrp && styles.rowUser,
-              ]}
-            >
-              <View style={[styles.rankBox, isFirst && styles.rankBoxFirst]}>
-                <Text style={[styles.rank, isFirst && styles.rankFirst]}>#{i + 1}</Text>
-              </View>
-
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.name}>
-                  {p.name} {p.nrp === ctx?.user?.nrp ? "(You)" : ""}
-                </Text>
-              </View>
-
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.km}>{p.distanceKm.toFixed(1)} km</Text>
-                <Text style={styles.sub}>{p.paceMinPerKm.toFixed(2)}</Text>
-              </View>
-            </Animated.View>
-          );
-        })}
-
-        <View style={{ height: 120 }} />
-      </ScrollView>
+        ListHeaderComponent={
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>🏆 Leaderboard (Top {leaderboardData.length})</Text>
+          </View>
+        }
+        ListFooterComponent={<View style={{ height: 120 }} />}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2E3A2E"]} />
+        }
+      />
 
       {/* STICKY FOOTER */}
       {showStickyFooter && (
@@ -149,5 +201,18 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 16,
     right: 16,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8EAE6',
+    borderRadius: 99,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4
   },
 });

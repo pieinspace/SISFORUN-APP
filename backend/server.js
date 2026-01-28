@@ -37,9 +37,13 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     try {
-        // Ambil user dari tabel login (sesuai DB yang kamu buat)
+        // Join login dengan users untuk dapat nama, pangkat, kesatuan
         const result = await db.query(
-            "SELECT id, nrp, password_hash, role, is_active FROM login WHERE nrp = $1",
+            `SELECT l.id, l.nrp, l.password_hash, l.role, l.is_active, 
+                    u.name, u.pangkat, u.kesatuan
+             FROM login l
+             LEFT JOIN users u ON l.nrp = u.nrp
+             WHERE l.nrp = $1`,
             [nrp]
         );
 
@@ -59,9 +63,16 @@ app.post("/api/auth/login", async (req, res) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
-        // Kembalikan user info tanpa password_hash
+        // Kembalikan user info dengan nama, pangkat, kesatuan
         return res.json({
-            user: { id: user.id, nrp: user.nrp, role: user.role },
+            user: {
+                id: user.id,
+                nrp: user.nrp,
+                role: user.role,
+                name: user.name || `User ${user.nrp}`,
+                pangkat: user.pangkat || '-',
+                kesatuan: user.kesatuan || '-'
+            },
         });
     } catch (err) {
         console.error(err);
@@ -106,7 +117,7 @@ app.post("/api/auth/seed", async (req, res) => {
 });
 
 // =====================================
-// LEADERBOARD (tetap pakai users + run_sessions seperti punyamu)
+// LEADERBOARD (bulan ini saja - reset setiap bulan)
 // =====================================
 app.get("/api/leaderboard", async (req, res) => {
     try {
@@ -121,7 +132,9 @@ app.get("/api/leaderboard", async (req, res) => {
            ELSE 0
         END as "paceMinPerKm"
       FROM users u
-      LEFT JOIN run_sessions r ON u.id = r.user_id
+      LEFT JOIN run_sessions r ON u.id = r.user_id 
+        AND r.date_created >= date_trunc('month', CURRENT_DATE)
+        AND r.date_created < date_trunc('month', CURRENT_DATE) + interval '1 month'
       GROUP BY u.id
       ORDER BY "distanceKm" DESC
       LIMIT 50
@@ -145,8 +158,102 @@ app.get("/api/leaderboard", async (req, res) => {
 });
 
 // =====================================
+// WEEKLY STATS (untuk target 14km per minggu)
+// =====================================
+app.get("/api/weekly-stats/:userId", async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        // Ambil total jarak minggu ini (Senin-Minggu)
+        const query = `
+            SELECT COALESCE(SUM(distance_km), 0) as total_km
+            FROM run_sessions
+            WHERE user_id = $1
+              AND date_created >= date_trunc('week', CURRENT_DATE)
+              AND date_created < date_trunc('week', CURRENT_DATE) + interval '1 week'
+        `;
+        const result = await db.query(query, [userId]);
+
+        res.json({
+            weeklyDistanceKm: parseFloat(result.rows[0].total_km),
+            targetKm: 14,
+            weekStart: new Date(Date.now() - (new Date().getDay() - 1) * 86400000).toISOString().split('T')[0]
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch weekly stats" });
+    }
+});
+
+// =====================================
+// ALL-TIME STATS (tidak pernah reset)
+// =====================================
+app.get("/api/alltime-stats/:userId", async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        const query = `
+            SELECT 
+                COALESCE(SUM(distance_km), 0) as total_km,
+                COALESCE(COUNT(*), 0) as total_runs,
+                CASE 
+                    WHEN SUM(distance_km) > 0 THEN (SUM(duration_sec) / 60.0) / SUM(distance_km)
+                    ELSE 0
+                END as avg_pace
+            FROM run_sessions
+            WHERE user_id = $1
+        `;
+        const result = await db.query(query, [userId]);
+        const row = result.rows[0];
+
+        res.json({
+            totalKm: parseFloat(row.total_km),
+            totalRuns: parseInt(row.total_runs),
+            avgPace: parseFloat(row.avg_pace)
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch all-time stats" });
+    }
+});
+
+// =====================================
 // RUNS
 // =====================================
+
+// GET - Ambil riwayat lari user (bulan ini saja)
+app.get("/api/runs/:userId", async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        // Hanya ambil data bulan ini
+        const query = `
+            SELECT id, user_id, distance_km, duration_sec, date_created, route_json
+            FROM run_sessions
+            WHERE user_id = $1
+              AND date_created >= date_trunc('month', CURRENT_DATE)
+              AND date_created < date_trunc('month', CURRENT_DATE) + interval '1 month'
+            ORDER BY date_created DESC
+            LIMIT 50
+        `;
+        const result = await db.query(query, [userId]);
+
+        const runs = result.rows.map((row) => ({
+            id: String(row.id),
+            date: row.date_created,
+            distanceKm: parseFloat(row.distance_km),
+            durationSec: parseInt(row.duration_sec),
+            route: row.route_json ? JSON.parse(row.route_json) : [],
+        }));
+
+        res.json(runs);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch runs" });
+    }
+});
+
+// POST - Simpan run baru
 app.post("/api/runs", async (req, res) => {
     const { userId, distanceKm, durationSec, route } = req.body;
 

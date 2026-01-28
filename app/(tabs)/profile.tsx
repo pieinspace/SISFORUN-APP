@@ -2,8 +2,9 @@ import SharedHeader from "@/src/components/SharedHeader";
 import { AppContext } from "@/src/context/AppContext";
 import { formatPace } from "@/src/utils/geo";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import React, { useContext, useEffect } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +23,18 @@ import Animated, {
 export default function ProfileScreen() {
   const ctx = useContext(AppContext);
   const router = useRouter();
+  const [locPermission, setLocPermission] = useState<boolean | null>(null);
+
+  const targetKm = ctx?.targetKm ?? 14;
+  const weeklyKm = ctx?.weeklyDistanceKm ?? 0;
+  const isTargetMet = weeklyKm >= targetKm;
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      setLocPermission(status === 'granted');
+    })();
+  }, []);
 
   // kalau belum login / user null -> langsung arahkan ke login
   useEffect(() => {
@@ -71,10 +84,33 @@ export default function ProfileScreen() {
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
       <View style={styles.toggleContainer}>
         <Ionicons name="location-outline" size={14} color="#6B776B" style={{ marginRight: 4 }} />
-        <View style={[styles.dot, { backgroundColor: '#B00020' }]} />
+        <View style={[styles.dot, { backgroundColor: locPermission ? '#4CAF50' : '#B00020' }]} />
       </View>
-      <TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => {
+          if (!isTargetMet) {
+            Alert.alert("Notifikasi", "Anda belum mencapai target minggu ini");
+          } else {
+            Alert.alert("Notifikasi", "Target minggu ini sudah tercapai! Luar biasa.");
+          }
+        }}
+      >
         <Ionicons name="notifications-outline" size={24} color="#2E3A2E" />
+        {!isTargetMet && (
+          <View
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: '#B00020',
+              borderWidth: 1,
+              borderColor: '#F5F6F3'
+            }}
+          />
+        )}
       </TouchableOpacity>
       <TouchableOpacity onPress={() => router.push("/settings")}>
         <Ionicons name="settings-outline" size={24} color="#2E3A2E" />
@@ -105,7 +141,9 @@ export default function ProfileScreen() {
 
           <View style={{ flex: 1 }}>
             <Text style={styles.name}>{ctx.user.name}</Text>
+            <Text style={styles.sub}>{ctx.user.pangkat || '-'}</Text>
             <Text style={styles.sub}>NRP: {ctx.user.nrp}</Text>
+            <Text style={styles.sub}>{ctx.user.kesatuan || '-'}</Text>
           </View>
         </Animated.View>
 
@@ -142,6 +180,21 @@ export default function ProfileScreen() {
           </View>
         </Animated.View>
 
+
+        <View style={styles.divider} />
+
+        {/* History Button */}
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => router.push("/history")}
+          activeOpacity={0.7}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="time-outline" size={20} color="#3D4A3E" style={{ marginRight: 10 }} />
+            <Text style={styles.menuText}>Riwayat Lari</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#8B998B" />
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
