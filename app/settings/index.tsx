@@ -1,4 +1,5 @@
 import SharedHeader from "@/src/components/SharedHeader";
+import { AppContext } from "@/src/context/AppContext";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -10,7 +11,10 @@ export default function SettingsScreen() {
     const [newPass, setNewPass] = useState("");
     const [confPass, setConfPass] = useState("");
 
-    const onSave = () => {
+    const ctx = React.useContext(AppContext);
+    const [loading, setLoading] = useState(false);
+
+    const onSave = async () => {
         if (!oldPass || !newPass || !confPass) {
             Alert.alert("Error", "Semua kolom wajib diisi");
             return;
@@ -24,10 +28,19 @@ export default function SettingsScreen() {
             return;
         }
 
-        // In a real app, we would call API here.
-        Alert.alert("Sukses", "Password berhasil diubah", [
-            { text: "OK", onPress: () => router.back() }
-        ]);
+        try {
+            setLoading(true);
+            if (ctx?.changePassword) {
+                await ctx.changePassword(oldPass, newPass);
+                Alert.alert("Sukses", "Password berhasil diubah", [
+                    { text: "OK", onPress: () => router.back() }
+                ]);
+            }
+        } catch (e: any) {
+            Alert.alert("Gagal", e.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

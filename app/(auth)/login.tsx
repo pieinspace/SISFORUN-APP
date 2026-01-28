@@ -83,7 +83,7 @@ export default function LoginScreen() {
       // ✅ role diambil dari backend (DB), bukan dari pilihan user
       await ctx.login({ nrp: cleanNrp, password: cleanPass });
 
-      Alert.alert("Login berhasil", "Selamat datang!");
+      // Langsung pindah ke profile tanpa Alert biar cepat
       router.replace("/(tabs)/profile");
     } catch (e: any) {
       doShake();

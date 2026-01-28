@@ -117,6 +117,49 @@ app.post("/api/auth/seed", async (req, res) => {
 });
 
 // =====================================
+// CHANGE PASSWORD
+// =====================================
+app.post("/api/auth/change-password", async (req, res) => {
+    const { nrp, oldPassword, newPassword } = req.body;
+
+    if (!nrp || !oldPassword || !newPassword) {
+        return res.status(400).json({ error: "All fields required" });
+    }
+
+    try {
+        // 1. Ambil hash password lama dari DB
+        const result = await db.query(
+            "SELECT password_hash FROM login WHERE nrp = $1",
+            [nrp]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        const user = result.rows[0];
+
+        // 2. Cek apakah password lama benar
+        const match = await bcrypt.compare(oldPassword, user.password_hash);
+        if (!match) {
+            return res.status(401).json({ error: "Password lama salah" });
+        }
+
+        // 3. Hash password baru dan update
+        const newHash = await bcrypt.hash(newPassword, 10);
+        await db.query(
+            "UPDATE login SET password_hash = $1 WHERE nrp = $2",
+            [newHash, nrp]
+        );
+
+        res.json({ success: true, message: "Password updated successfully" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to update password" });
+    }
+});
+
+// =====================================
 // LEADERBOARD (bulan ini saja - reset setiap bulan)
 // =====================================
 app.get("/api/leaderboard", async (req, res) => {

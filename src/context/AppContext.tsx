@@ -22,6 +22,7 @@ type AppContextValue = {
   logout: () => void;
   addRunSession: (session: RunSession) => Promise<void>;
   refreshWeeklyStats: () => Promise<void>;
+  changePassword: (oldPass: string, newPass: string) => Promise<void>;
 };
 
 export const AppContext = createContext<AppContextValue | null>(null);
@@ -29,7 +30,7 @@ export const AppContext = createContext<AppContextValue | null>(null);
 export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   // ✅ GANTI IP ini sesuai IP laptop/PC kamu (yang satu WiFi dengan HP)
   // contoh: http://192.168.1.5:4000/api
-  const API_URL = "http://172.28.32.91:4000/api";
+  const API_URL = "http://192.168.1.209:4000/api";
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -240,6 +241,21 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
     }
   };
 
+  const changePassword = async (oldPass: string, newPass: string) => {
+    if (!user) throw new Error("User not logged in");
+
+    const response = await fetch(`${API_URL}/auth/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nrp: user.nrp, oldPassword: oldPass, newPassword: newPass }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Gagal mengubah password");
+    }
+  };
+
   const value = useMemo<AppContextValue>(
     () => ({
       isLoggedIn,
@@ -254,6 +270,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
       logout,
       addRunSession,
       refreshWeeklyStats,
+      changePassword,
     }),
     [isLoggedIn, user, targetKm, weeklyDistanceKm, allTimeStats, sortedLeaderboard, runHistory, userStats]
   );
