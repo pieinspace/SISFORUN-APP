@@ -1,14 +1,70 @@
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const rateLimit = require("express-rate-limit");
 const db = require("./db");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+const JWT_SECRET = process.env.INTEGRATION_SECRET || "fallback-secret-key";
 
 app.use(cors());
 app.use(express.json());
+
+// =====================================
+// RATE LIMITING
+// =====================================
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 menit
+    max: 5, // max 5 attempts per window
+    message: { error: "Terlalu banyak percobaan login. Coba lagi dalam 15 menit." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// =====================================
+// AUTHENTICATION MIDDLEWARE
+// =====================================
+function authMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Token tidak ditemukan" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded; // { id, nrp, role }
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: "Token tidak valid atau expired" });
+    }
+}
+
+// Middleware untuk validasi userId match dengan token
+function validateUserAccess(req, res, next) {
+    const { userId } = req.params;
+
+    // Validate userId is a number
+    if (!userId || isNaN(parseInt(userId))) {
+        return res.status(400).json({ error: "userId harus berupa angka" });
+    }
+
+    // Check user can only access their own data
+    if (req.user.id !== parseInt(userId)) {
+        return res.status(403).json({ error: "Akses ditolak: Anda hanya dapat mengakses data milik sendiri" });
+    }
+
+    next();
+}
+
+// =====================================
+// PUBLIC ENDPOINTS
+// =====================================
 
 // Test Endpoint
 app.get("/", (req, res) => {
@@ -29,7 +85,7 @@ app.get("/test-db", async (req, res) => {
 // =====================================
 // AUTH
 // =====================================
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", loginLimiter, async (req, res) => {
     const { nrp, password } = req.body;
 
     if (!nrp || !password) {
@@ -38,9 +94,10 @@ app.post("/api/auth/login", async (req, res) => {
 
     try {
         // Join login dengan users untuk dapat nama, pangkat, kesatuan
+        // PENTING: Ambil u.id (user_id) bukan l.id (login_id) agar match dengan run_sessions
         const result = await db.query(
-            `SELECT l.id, l.nrp, l.password_hash, l.role, l.is_active, 
-                    u.name, u.pangkat, u.kesatuan
+            `SELECT l.id as login_id, l.nrp, l.password_hash, l.role, l.is_active, 
+                    u.id as user_id, u.name, u.pangkat, u.kesatuan
              FROM login l
              LEFT JOIN users u ON l.nrp = u.nrp
              WHERE l.nrp = $1`,
@@ -63,16 +120,27 @@ app.post("/api/auth/login", async (req, res) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
-        // Kembalikan user info dengan nama, pangkat, kesatuan
+        // PENTING: Gunakan user_id (dari tabel users), bukan login_id
+        const userId = user.user_id || user.login_id; // fallback ke login_id jika user_id null
+
+        // Generate JWT token dengan user_id yang benar
+        const token = jwt.sign(
+            { id: userId, nrp: user.nrp, role: user.role },
+            JWT_SECRET,
+            { expiresIn: "7d" }
+        );
+
+        // Kembalikan user info dengan user_id yang benar + token
         return res.json({
             user: {
-                id: user.id,
+                id: userId,
                 nrp: user.nrp,
                 role: user.role,
                 name: user.name || `User ${user.nrp}`,
                 pangkat: user.pangkat || '-',
                 kesatuan: user.kesatuan || '-'
             },
+            token: token,
         });
     } catch (err) {
         console.error(err);
@@ -81,40 +149,42 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 // (OPSIONAL) Seed user mock langsung dari API (biar gampang testing)
-// Pakai sekali aja, nanti kamu bisa hapus endpoint ini kalau sudah selesai dev.
-app.post("/api/auth/seed", async (req, res) => {
-    const { nrp, password, role } = req.body;
+// Hanya aktif di development mode
+if (process.env.NODE_ENV !== 'production') {
+    app.post("/api/auth/seed", async (req, res) => {
+        const { nrp, password, role } = req.body;
 
-    if (!nrp || !password || !role) {
-        return res
-            .status(400)
-            .json({ error: "nrp, password, role required (role: militer/asn)" });
-    }
+        if (!nrp || !password || !role) {
+            return res
+                .status(400)
+                .json({ error: "nrp, password, role required (role: militer/asn)" });
+        }
 
-    if (!["militer", "asn"].includes(role)) {
-        return res.status(400).json({ error: "role must be 'militer' or 'asn'" });
-    }
+        if (!["militer", "asn"].includes(role)) {
+            return res.status(400).json({ error: "role must be 'militer' or 'asn'" });
+        }
 
-    try {
-        const hash = await bcrypt.hash(password, 10);
+        try {
+            const hash = await bcrypt.hash(password, 10);
 
-        const result = await db.query(
-            `INSERT INTO login (nrp, password_hash, role)
+            const result = await db.query(
+                `INSERT INTO login (nrp, password_hash, role)
        VALUES ($1, $2, $3)
        RETURNING id, nrp, role, is_active, created_at`,
-            [nrp, hash, role]
-        );
+                [nrp, hash, role]
+            );
 
-        return res.status(201).json({ user: result.rows[0] });
-    } catch (err) {
-        console.error(err);
-        // kalau nrp duplicate
-        if (err.code === "23505") {
-            return res.status(409).json({ error: "NRP already exists" });
+            return res.status(201).json({ user: result.rows[0] });
+        } catch (err) {
+            console.error(err);
+            // kalau nrp duplicate
+            if (err.code === "23505") {
+                return res.status(409).json({ error: "NRP already exists" });
+            }
+            return res.status(500).json({ error: "Failed to seed user" });
         }
-        return res.status(500).json({ error: "Failed to seed user" });
-    }
-});
+    });
+}
 
 // =====================================
 // CHANGE PASSWORD
@@ -203,7 +273,7 @@ app.get("/api/leaderboard", async (req, res) => {
 // =====================================
 // WEEKLY STATS (untuk target 14km per minggu)
 // =====================================
-app.get("/api/weekly-stats/:userId", async (req, res) => {
+app.get("/api/weekly-stats/:userId", authMiddleware, validateUserAccess, async (req, res) => {
     const { userId } = req.params;
 
     try {
@@ -231,7 +301,7 @@ app.get("/api/weekly-stats/:userId", async (req, res) => {
 // =====================================
 // ALL-TIME STATS (tidak pernah reset)
 // =====================================
-app.get("/api/alltime-stats/:userId", async (req, res) => {
+app.get("/api/alltime-stats/:userId", authMiddleware, validateUserAccess, async (req, res) => {
     const { userId } = req.params;
 
     try {
@@ -265,7 +335,7 @@ app.get("/api/alltime-stats/:userId", async (req, res) => {
 // =====================================
 
 // GET - Ambil riwayat lari user (bulan ini saja)
-app.get("/api/runs/:userId", async (req, res) => {
+app.get("/api/runs/:userId", authMiddleware, validateUserAccess, async (req, res) => {
     const { userId } = req.params;
 
     try {
@@ -296,9 +366,11 @@ app.get("/api/runs/:userId", async (req, res) => {
     }
 });
 
-// POST - Simpan run baru
-app.post("/api/runs", async (req, res) => {
-    const { userId, distanceKm, durationSec, route } = req.body;
+// POST - Simpan run baru (dilindungi auth)
+app.post("/api/runs", authMiddleware, async (req, res) => {
+    // Gunakan user.id dari token untuk keamanan (bukan dari body)
+    const userId = req.user.id;
+    const { distanceKm, durationSec, route } = req.body;
 
     try {
         const query = `

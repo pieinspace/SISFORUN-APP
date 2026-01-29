@@ -30,22 +30,36 @@ export const AppContext = createContext<AppContextValue | null>(null);
 export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   // ✅ GANTI IP ini sesuai IP laptop/PC kamu (yang satu WiFi dengan HP)
   // contoh: http://192.168.1.5:4000/api
-  const API_URL = "http://192.168.1.209:4000/api";
+  const API_URL = "http://172.28.32.83:4000/api";
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null); // JWT token
   const [weeklyDistanceKm, setWeeklyDistanceKm] = useState(0);
   const [allTimeStats, setAllTimeStats] = useState<UserStats>({ totalKm: 0, totalRuns: 0, avgPace: 0 });
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
   const [runHistory, setRunHistory] = useState<RunSession[]>([]);
 
+  // Helper: buat headers dengan auth token
+  const getAuthHeaders = () => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
+    return headers;
+  };
+
   // =========================
   // ALL-TIME STATS (tidak pernah reset)
   // =========================
-  const fetchAllTimeStats = async (userId: string) => {
+  const fetchAllTimeStats = async (userId: string, token?: string) => {
     try {
-      const response = await fetch(`${API_URL}/alltime-stats/${userId}`);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token || authToken) {
+        headers["Authorization"] = `Bearer ${token || authToken}`;
+      }
+      const response = await fetch(`${API_URL}/alltime-stats/${userId}`, { headers });
       if (response.ok) {
         const data = await response.json();
         setAllTimeStats(data);
@@ -59,9 +73,13 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   // =========================
   // WEEKLY STATS
   // =========================
-  const fetchWeeklyStats = async (userId: string) => {
+  const fetchWeeklyStats = async (userId: string, token?: string) => {
     try {
-      const response = await fetch(`${API_URL}/weekly-stats/${userId}`);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token || authToken) {
+        headers["Authorization"] = `Bearer ${token || authToken}`;
+      }
+      const response = await fetch(`${API_URL}/weekly-stats/${userId}`, { headers });
       if (response.ok) {
         const data = await response.json();
         setWeeklyDistanceKm(data.weeklyDistanceKm);
@@ -118,9 +136,13 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   // LOGIN
   // =========================
 
-  const fetchRunHistory = async (userId: string) => {
+  const fetchRunHistory = async (userId: string, token?: string) => {
     try {
-      const response = await fetch(`${API_URL}/runs/${userId}`);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token || authToken) {
+        headers["Authorization"] = `Bearer ${token || authToken}`;
+      }
+      const response = await fetch(`${API_URL}/runs/${userId}`, { headers });
       if (response.ok) {
         const data = await response.json();
         setRunHistory(data);
@@ -157,11 +179,15 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
       setUser(backendUser);
       setIsLoggedIn(true);
 
-      // Refresh leaderboard, riwayat lari, weekly stats, dan all-time stats
+      // Simpan JWT token
+      const token = data.token;
+      setAuthToken(token);
+
+      // Refresh leaderboard, riwayat lari, weekly stats, dan all-time stats (dengan token)
       fetchLeaderboard();
-      fetchRunHistory(String(backendUser.id));
-      fetchWeeklyStats(String(backendUser.id));
-      fetchAllTimeStats(String(backendUser.id));
+      fetchRunHistory(String(backendUser.id), token);
+      fetchWeeklyStats(String(backendUser.id), token);
+      fetchAllTimeStats(String(backendUser.id), token);
     } catch (err: any) {
       throw new Error(err.message);
     }
@@ -177,6 +203,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   const logout = () => {
     setIsLoggedIn(false);
     setUser(null);
+    setAuthToken(null);
     setRunHistory([]);
     setWeeklyDistanceKm(0);
   };
@@ -222,7 +249,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
 
       const response = await fetch(`${API_URL}/runs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 

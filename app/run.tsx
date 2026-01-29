@@ -281,7 +281,9 @@ export default function TrackingScreen() {
                 subRef.current.remove();
                 subRef.current = null;
             }
-        } catch { }
+        } catch (e) {
+            console.warn('Failed to remove location subscription:', e);
+        }
         stopTimer();
         setIsTracking(false);
     }

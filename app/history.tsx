@@ -10,13 +10,7 @@ import {
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { AppContext } from "../src/context/AppContext";
-
-function formatPace(pace: number): string {
-    if (pace <= 0) return "-";
-    const mins = Math.floor(pace);
-    const secs = Math.round((pace - mins) * 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
+import { formatPace } from "../src/utils/geo";
 
 function formatDate(dateStr: string): string {
     const date = new Date(dateStr);
