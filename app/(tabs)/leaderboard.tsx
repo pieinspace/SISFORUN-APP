@@ -11,7 +11,6 @@ export default function LeaderboardScreen() {
   const ctx = useContext(AppContext);
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const [visibleLimit, setVisibleLimit] = useState(10);
   const [locPermission, setLocPermission] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -25,22 +24,12 @@ export default function LeaderboardScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // ctx asumsikan punya fungsi untuk refresh manual atau kita panggil fetchLeaderboard jika ada di ctx
-    // Untuk sekarang kita asumsikan fetch berkelanjutan sudah jalan, tapi kita bisa trigger manual jika ada.
-    // Karena fetchLeaderboard tidak di-expose di AppContextValue, kita tunggu intervalnya atau tambahkan ke ctx.
-
-    // Simulasi loading sebentar
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const loadMore = () => {
-    if (visibleLimit < leaderboardData.length) {
-      setVisibleLimit(prev => prev + 10);
-    }
-  };
-
-  /* 1. Slice based on dynamic limit */
-  const displayedList = leaderboardData.slice(0, visibleLimit);
+  /* 1. Fixed to Top 10 only */
+  const TOP_LIMIT = 10;
+  const displayedList = leaderboardData.slice(0, TOP_LIMIT);
 
   /* 2. Find user rank */
   const userRankIndex = leaderboardData.findIndex(
@@ -49,8 +38,8 @@ export default function LeaderboardScreen() {
   const userRank = userRankIndex + 1;
   const userItem = userRankIndex >= 0 ? leaderboardData[userRankIndex] : null;
 
-  /* 3. Check if user is outside visible or top 10 */
-  const showStickyFooter = userRank > visibleLimit && userItem;
+  /* 3. Show user at bottom if NOT in top 10 */
+  const showUserAtBottom = userRank > TOP_LIMIT && userItem;
 
   const renderItem = ({ item, index }: { item: typeof leaderboardData[0], index: number }) => {
     const isFirst = index === 0;
@@ -107,42 +96,44 @@ export default function LeaderboardScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🏆 Leaderboard (Top {leaderboardData.length})</Text>
+            <Text style={styles.sectionTitle}>🏆 Top 10 Leaderboard</Text>
           </View>
         }
-        ListFooterComponent={<View style={{ height: 120 }} />}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          showUserAtBottom ? (
+            <View>
+              {/* Separator */}
+              <View style={styles.separator}>
+                <View style={styles.separatorLine} />
+                <Text style={styles.separatorText}>Peringkat Anda</Text>
+                <View style={styles.separatorLine} />
+              </View>
+              {/* User Row */}
+              <Animated.View
+                entering={FadeInDown.delay(300).duration(350)}
+                style={[styles.row, styles.rowUser]}
+              >
+                <View style={styles.rankBox}>
+                  <Text style={styles.rank}>#{userRank}</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.name}>{userItem?.name} (You)</Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={styles.km}>{userItem?.distanceKm.toFixed(1)} km</Text>
+                  <Text style={styles.sub}>{userItem?.paceMinPerKm.toFixed(2)}</Text>
+                </View>
+              </Animated.View>
+              <View style={{ height: 100 }} />
+            </View>
+          ) : (
+            <View style={{ height: 100 }} />
+          )
+        }
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2E3A2E"]} />
         }
       />
-
-      {/* STICKY FOOTER */}
-      {showStickyFooter && (
-        <Animated.View entering={FadeInDown.delay(500)} style={styles.stickyFooter}>
-          <View
-            style={[
-              styles.row,
-              styles.rowUser,
-              { marginBottom: 0, shadowOpacity: 0.1 },
-            ]}
-          >
-            <View style={styles.rankBox}>
-              <Text style={styles.rank}>#{userRank}</Text>
-            </View>
-
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.name}>{userItem?.name} (You)</Text>
-            </View>
-
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.km}>{userItem?.distanceKm.toFixed(1)} km</Text>
-              <Text style={styles.sub}>{userItem?.paceMinPerKm.toFixed(2)}</Text>
-            </View>
-          </View>
-        </Animated.View>
-      )}
     </View>
   );
 }
@@ -214,5 +205,22 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4
+  },
+  separator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+    paddingHorizontal: 8,
+  },
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#D0D0D0',
+  },
+  separatorText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B776B',
   },
 });
