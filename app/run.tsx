@@ -183,7 +183,7 @@ export default function TrackingScreen() {
                         timeInterval: 1000,
                         distanceInterval: 5,
                         foregroundService: {
-                            notificationTitle: "SisfoRun Tracking",
+                            notificationTitle: "Forza Tracking",
                             notificationBody: "Tracking lari sedang berjalan...",
                         }
                     });

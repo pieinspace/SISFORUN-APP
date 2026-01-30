@@ -121,7 +121,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <SharedHeader
-        title="SISFORUN"
+        title="FORZA"
         subtitle="Profile"
         rightIcons={CustomRightIcons}
       />

@@ -68,7 +68,7 @@ function validateUserAccess(req, res, next) {
 
 // Test Endpoint
 app.get("/", (req, res) => {
-    res.send("SisfoRun API is functional");
+    res.send("Forza API is functional");
 });
 
 // Test DB Connection

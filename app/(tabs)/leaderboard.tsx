@@ -86,7 +86,7 @@ export default function LeaderboardScreen() {
 
   return (
     <View style={styles.container}>
-      <SharedHeader title="SISFORUN" subtitle="Leaderboard" rightIcons={CustomRightIcons} />
+      <SharedHeader title="FORZA" subtitle="Leaderboard" rightIcons={CustomRightIcons} />
 
       <FlatList
         data={displayedList}

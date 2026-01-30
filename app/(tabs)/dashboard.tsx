@@ -1,6 +1,6 @@
-import React, { useContext } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
+import React, { useContext } from "react";
+import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import { AppContext } from "../../src/context/AppContext";
 import { formatPace } from "../../src/utils/geo";
 
@@ -77,7 +77,7 @@ export default function DashboardScreen() {
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.title}>SISFORUN</Text>
+        <Text style={styles.title}>FORZA</Text>
         <View style={styles.headerRight}>
           <View style={styles.gpsDot} />
           <Text style={styles.small2}>GPS</Text>

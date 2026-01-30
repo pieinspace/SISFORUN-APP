@@ -28,9 +28,7 @@ type AppContextValue = {
 export const AppContext = createContext<AppContextValue | null>(null);
 
 export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  // ✅ GANTI IP ini sesuai IP laptop/PC kamu (yang satu WiFi dengan HP)
-  // contoh: http://192.168.1.5:4000/api
-  const API_URL = "http://172.28.32.83:4000/api";
+  const API_URL = "http://172.28.32.91:4000/api";
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -53,7 +51,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   // =========================
   // ALL-TIME STATS (tidak pernah reset)
   // =========================
-  const fetchAllTimeStats = async (userId: string, token?: string) => {
+  const fetchAllTimeStats = async (userId: string, token?: string): Promise<void> => {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token || authToken) {
@@ -73,7 +71,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   // =========================
   // WEEKLY STATS
   // =========================
-  const fetchWeeklyStats = async (userId: string, token?: string) => {
+  const fetchWeeklyStats = async (userId: string, token?: string): Promise<void> => {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token || authToken) {
@@ -93,7 +91,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   // =========================
   // LEADERBOARD
   // =========================
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = async (): Promise<void> => {
     try {
       const response = await fetch(`${API_URL}/leaderboard`);
       if (response.ok) {
@@ -136,7 +134,7 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
   // LOGIN
   // =========================
 
-  const fetchRunHistory = async (userId: string, token?: string) => {
+  const fetchRunHistory = async (userId: string, token?: string): Promise<void> => {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token || authToken) {
@@ -183,11 +181,13 @@ export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => 
       const token = data.token;
       setAuthToken(token);
 
-      // Refresh leaderboard, riwayat lari, weekly stats, dan all-time stats (dengan token)
-      fetchLeaderboard();
-      fetchRunHistory(String(backendUser.id), token);
-      fetchWeeklyStats(String(backendUser.id), token);
-      fetchAllTimeStats(String(backendUser.id), token);
+      // Refresh semua data secara PARALLEL untuk mempercepat loading
+      await Promise.all([
+        fetchLeaderboard(),
+        fetchRunHistory(String(backendUser.id), token),
+        fetchWeeklyStats(String(backendUser.id), token),
+        fetchAllTimeStats(String(backendUser.id), token),
+      ]);
     } catch (err: any) {
       throw new Error(err.message);
     }

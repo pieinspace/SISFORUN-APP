@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "sisforun",
-    "slug": "sisforun",
+    "name": "FORZA",
+    "slug": "forza",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "sisforun",
+    "scheme": "forza",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -19,7 +19,7 @@
           "fetch"
         ]
       },
-      "bundleIdentifier": "com.sisforun.app"
+      "bundleIdentifier": "com.forza.app"
     },
     "android": {
       "adaptiveIcon": {

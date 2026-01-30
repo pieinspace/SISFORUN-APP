@@ -103,7 +103,7 @@ export default function LoginScreen() {
             resizeMode="contain"
           />
         </View>
-        <Text style={styles.appName}>SISFORUN</Text>
+        <Text style={styles.appName}>FORZA</Text>
       </Animated.View>
 
       <Animated.View entering={FadeInDown.duration(500)} style={[styles.cardWrap, shakeStyle]}>
@@ -147,7 +147,7 @@ export default function LoginScreen() {
             <Text style={styles.btnText}>{loading ? "Memproses..." : "Masuk →"}</Text>
           </TouchableOpacity>
 
-          <Text style={styles.terms}>Dengan masuk, Anda menyetujui syarat & ketentuan SISFORUN</Text>
+          <Text style={styles.terms}>Dengan masuk, Anda menyetujui syarat & ketentuan FORZA</Text>
         </View>
       </Animated.View>
     </View>
