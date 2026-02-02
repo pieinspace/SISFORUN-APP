@@ -7,6 +7,9 @@ export type User = {
   role: UserRole;
   pangkat?: string;
   kesatuan?: string;
+  subdis?: string;
+  corps?: string;
+  kd_pkt?: string;
 };
 
 export type LeaderboardItem = {

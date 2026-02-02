@@ -141,9 +141,17 @@ export default function ProfileScreen() {
 
           <View style={{ flex: 1 }}>
             <Text style={styles.name}>{ctx.user.name}</Text>
-            <Text style={styles.sub}>{ctx.user.pangkat || '-'}</Text>
             <Text style={styles.sub}>NRP: {ctx.user.nrp}</Text>
-            <Text style={styles.sub}>{ctx.user.kesatuan || '-'}</Text>
+            <Text style={styles.sub}>Pangkat: {ctx.user.pangkat || '-'}</Text>
+            <Text style={styles.sub}>Kesatuan: {ctx.user.kesatuan || '-'}</Text>
+            <Text style={styles.sub}>Subdis: {ctx.user.subdis || '-'}</Text>
+            <Text style={styles.sub}>
+              Corps: {(() => {
+                const pk = parseInt(ctx.user.kd_pkt || "0");
+                const isAsnOrGeneral = (pk >= 21 && pk <= 45) || (pk >= 91 && pk <= 94);
+                return isAsnOrGeneral ? "-" : (ctx.user.corps || "-");
+              })()}
+            </Text>
           </View>
         </Animated.View>
 
