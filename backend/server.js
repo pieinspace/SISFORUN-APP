@@ -97,15 +97,15 @@ app.post("/api/auth/login", loginLimiter, async (req, res) => {
         // PENTING: Ambil u.id (user_id) bukan l.id (login_id) agar match dengan run_sessions
         const result = await db.query(
             `SELECT l.id as login_id, l.nrp, l.password_hash, l.role, l.is_active, 
-                    u.id as user_id, u.name, u.pangkat, u.kesatuan, u.kd_pkt,
+                    u.id as user_id, u.name, u.pangkat, u.kotama, u.kd_pkt,
                     k.ur_ktm as kesatuan_name,
                     s.ur_smkl as subdis_name,
                     c.init_corps as corps_name,
                     p.ur_pkt as pangkat_name
              FROM login l
              LEFT JOIN users u ON l.nrp = u.nrp
-             LEFT JOIN kesatuan k ON u.kd_ktm = k.kd_ktm
-             LEFT JOIN subdis s ON u.kd_ktm = s.kd_ktm AND u.kd_smkl = s.kd_smkl
+             LEFT JOIN kotama k ON u.kd_ktm = k.kd_ktm
+             LEFT JOIN kesatuan s ON u.kd_ktm = s.kd_ktm AND u.kd_smkl = s.kd_smkl
              LEFT JOIN corps c ON u.kd_corps = c.kd_corps
              LEFT JOIN pangkat p ON u.kd_pkt = p.kd_pkt
              WHERE l.nrp = $1`,
@@ -146,7 +146,7 @@ app.post("/api/auth/login", loginLimiter, async (req, res) => {
                 role: user.role,
                 name: user.name || `User ${user.nrp}`,
                 pangkat: user.pangkat_name || user.pangkat || '-',
-                kesatuan: user.kesatuan_name || user.kesatuan || '-',
+                kesatuan: user.kesatuan_name || user.kotama || '-',
                 subdis: user.subdis_name || '-',
                 corps: user.corps_name || '-',
                 kd_pkt: user.kd_pkt || ''
@@ -261,7 +261,6 @@ app.get("/api/leaderboard", async (req, res) => {
         AND r.date_created < date_trunc('month', CURRENT_DATE) + interval '1 month'
       GROUP BY u.id
       ORDER BY "distanceKm" DESC
-      LIMIT 50
     `;
 
         const result = await db.query(query);

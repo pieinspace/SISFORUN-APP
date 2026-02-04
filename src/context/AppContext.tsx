@@ -28,7 +28,7 @@ type AppContextValue = {
 export const AppContext = createContext<AppContextValue | null>(null);
 
 export const AppProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const API_URL = "http://172.28.32.101:4000/api";
+  const API_URL = "http://172.28.32.107:4000/api";
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<User | null>(null);

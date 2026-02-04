@@ -143,8 +143,6 @@ export default function ProfileScreen() {
             <Text style={styles.name}>{ctx.user.name}</Text>
             <Text style={styles.sub}>NRP: {ctx.user.nrp}</Text>
             <Text style={styles.sub}>Pangkat: {ctx.user.pangkat || '-'}</Text>
-            <Text style={styles.sub}>Kesatuan: {ctx.user.kesatuan || '-'}</Text>
-            <Text style={styles.sub}>Subdis: {ctx.user.subdis || '-'}</Text>
             <Text style={styles.sub}>
               Corps: {(() => {
                 const pk = parseInt(ctx.user.kd_pkt || "0");
@@ -152,6 +150,8 @@ export default function ProfileScreen() {
                 return isAsnOrGeneral ? "-" : (ctx.user.corps || "-");
               })()}
             </Text>
+            <Text style={styles.sub}>Kotama: {ctx.user.kesatuan || '-'}</Text>
+            <Text style={styles.sub}>Kesatuan: {ctx.user.subdis || '-'}</Text>
           </View>
         </Animated.View>
 

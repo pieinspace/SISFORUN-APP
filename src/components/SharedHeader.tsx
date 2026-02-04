@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+const AnimatedIonicons = Animated.createAnimatedComponent(Ionicons);
 
 interface SharedHeaderProps {
     title: string;
@@ -11,6 +13,7 @@ interface SharedHeaderProps {
     showBack?: boolean;
     rightIcons?: React.ReactNode;
     onBackPress?: () => void;
+    darkMode?: boolean;
 }
 
 export default function SharedHeader({
@@ -20,18 +23,68 @@ export default function SharedHeader({
     showBack = false,
     rightIcons,
     onBackPress,
+    darkMode = false,
 }: SharedHeaderProps) {
     const router = useRouter();
+    const darkVal = useSharedValue(darkMode ? 1 : 0);
+
+    React.useEffect(() => {
+        darkVal.value = withTiming(darkMode ? 1 : 0, { duration: 400 });
+    }, [darkMode]);
+
+    const animatedBgStyle = useAnimatedStyle(() => {
+        const backgroundColor = interpolateColor(
+            darkVal.value,
+            [0, 1],
+            ['#F5F6F3', '#1A1A1A']
+        );
+        return { backgroundColor };
+    });
+
+    const animatedTextStyle = useAnimatedStyle(() => {
+        const color = interpolateColor(
+            darkVal.value,
+            [0, 1],
+            ['#2E3A2E', '#FFFFFF']
+        );
+        return { color };
+    });
+
+    const animatedSubStyle = useAnimatedStyle(() => {
+        const color = interpolateColor(
+            darkVal.value,
+            [0, 1],
+            ['#6B776B', 'rgba(255,255,255,0.6)']
+        );
+        return { color };
+    });
+
+    const animatedIconColor = useAnimatedStyle(() => {
+        const color = interpolateColor(
+            darkVal.value,
+            [0, 1],
+            ['#2E3A2E', '#FFFFFF']
+        );
+        return { color: color };
+    });
 
     return (
-        <View style={styles.primaryContainer}>
+        <Animated.View style={[styles.primaryContainer, animatedBgStyle]}>
             <SafeAreaView edges={['top']} style={styles.safeArea}>
                 <View style={styles.content}>
                     {/* Center Section (Absolute) */}
                     {centerTitle && (
                         <View style={styles.centerContainer} pointerEvents="none">
-                            <Text style={styles.centerTitleText}>{title}</Text>
-                            {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+                            <View style={styles.titleRow}>
+                                <Image
+                                    source={require('../../assets/images/favicon.png')}
+                                    style={styles.logo}
+                                />
+                                <View style={styles.textContainer}>
+                                    <Animated.Text style={[styles.centerTitleText, animatedTextStyle]}>{title}</Animated.Text>
+                                    {subtitle && <Animated.Text style={[styles.subtitle, animatedSubStyle]}>{subtitle}</Animated.Text>}
+                                </View>
+                            </View>
                         </View>
                     )}
 
@@ -43,13 +96,19 @@ export default function SharedHeader({
                                 style={styles.backButton}
                                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             >
-                                <Ionicons name="chevron-back" size={24} color="#2E3A2E" />
+                                <AnimatedIonicons name="chevron-back" size={24} style={animatedIconColor} />
                             </TouchableOpacity>
                         )}
                         {!centerTitle && (
-                            <View>
-                                <Text style={styles.title}>{title}</Text>
-                                {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+                            <View style={styles.titleRow}>
+                                <Image
+                                    source={require('../../assets/images/favicon.png')}
+                                    style={styles.logo}
+                                />
+                                <View style={styles.textContainer}>
+                                    <Animated.Text style={[styles.title, animatedTextStyle]}>{title}</Animated.Text>
+                                    {subtitle && <Animated.Text style={[styles.subtitle, animatedSubStyle]}>{subtitle}</Animated.Text>}
+                                </View>
                             </View>
                         )}
                     </View>
@@ -60,7 +119,7 @@ export default function SharedHeader({
                     </View>
                 </View>
             </SafeAreaView>
-        </View>
+        </Animated.View>
     );
 }
 
@@ -69,6 +128,11 @@ const styles = StyleSheet.create({
         backgroundColor: '#F5F6F3',
         // Optional shadow/elevation if needed, but keeping it clean for now
         zIndex: 10,
+    },
+    darkContainer: {
+        backgroundColor: '#1A1A1A',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.05)',
     },
     safeArea: {
         // backgroundColor: '#F5F6F3', 
@@ -109,12 +173,24 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 18,
         fontWeight: '900',
-        color: '#2E3A2E',
+    },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    logo: {
+        width: 36,
+        height: 36,
+        marginRight: 10,
+        resizeMode: 'contain',
+    },
+    textContainer: {
+        flexDirection: 'column',
+        justifyContent: 'center',
     },
     centerTitleText: {
         fontSize: 16,
         fontWeight: '800',
-        color: '#2E3A2E',
         letterSpacing: 2,
         textTransform: 'uppercase',
     },
@@ -122,5 +198,11 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#6B776B',
         fontWeight: '600',
+    },
+    darkText: {
+        color: '#FFFFFF',
+    },
+    darkSubdis: {
+        color: 'rgba(255,255,255,0.6)',
     },
 });

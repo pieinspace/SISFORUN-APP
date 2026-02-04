@@ -11,10 +11,12 @@ import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react
 import Animated, {
     FadeInDown,
     FadeInUp,
+    interpolate,
+    interpolateColor,
     useAnimatedStyle,
     useSharedValue,
     withSequence,
-    withTiming,
+    withTiming
 } from "react-native-reanimated";
 
 // Define Task for background
@@ -94,6 +96,48 @@ export default function TrackingScreen() {
 
     const barStyle = useAnimatedStyle(() => ({
         width: barW.value,
+    }));
+
+    const darkVal = useSharedValue(0);
+    useEffect(() => {
+        darkVal.value = withTiming(isTracking ? 1 : 0, { duration: 400 });
+    }, [isTracking, darkVal]);
+
+    const animatedContainerStyle = useAnimatedStyle(() => ({
+        backgroundColor: interpolateColor(darkVal.value, [0, 1], ['#F8F8F8', '#1A1A1A']),
+    }));
+
+    const animatedCardStyle = useAnimatedStyle(() => ({
+        backgroundColor: interpolateColor(darkVal.value, [0, 1], ['#FFFFFF', '#2A2A2A']),
+        shadowOpacity: interpolate(darkVal.value, [0, 1], [0.05, 0.1]),
+    }));
+
+    const animatedBigNumberStyle = useAnimatedStyle(() => ({
+        color: interpolateColor(darkVal.value, [0, 1], ['#2E3A2E', '#FFFFFF']),
+    }));
+
+    const animatedUnitStyle = useAnimatedStyle(() => ({
+        color: interpolateColor(darkVal.value, [0, 1], ['rgba(46,58,46,0.6)', 'rgba(255,255,255,0.6)']),
+    }));
+
+    const animatedStatLabelStyle = useAnimatedStyle(() => ({
+        color: interpolateColor(darkVal.value, [0, 1], ['rgba(46,58,46,0.5)', 'rgba(255,255,255,0.5)']),
+    }));
+
+    const animatedTargetTitleStyle = useAnimatedStyle(() => ({
+        color: interpolateColor(darkVal.value, [0, 1], ['#2E3A2E', '#FFFFFF']),
+    }));
+
+    const animatedTargetHintStyle = useAnimatedStyle(() => ({
+        color: interpolateColor(darkVal.value, [0, 1], ['rgba(46,58,46,0.6)', 'rgba(255,255,255,0.6)']),
+    }));
+
+    const animatedTargetToggleHintStyle = useAnimatedStyle(() => ({
+        color: interpolateColor(darkVal.value, [0, 1], ['#6B8B6B', '#A5D6A7']),
+    }));
+
+    const animatedTrackStyle = useAnimatedStyle(() => ({
+        backgroundColor: interpolateColor(darkVal.value, [0, 1], ['#EEEEEE', '#333333']),
     }));
 
     const paceMinPerKm = useMemo(() => {
@@ -293,6 +337,24 @@ export default function TrackingScreen() {
         stopTrackingInternal();
     }
 
+    function finishRun() {
+        if (ctx?.addRunSession) {
+            const newSessionId = Math.random().toString();
+            ctx.addRunSession({
+                id: newSessionId,
+                date: new Date().toISOString(),
+                distanceKm: distanceKm,
+                durationSec: elapsedSec,
+                route: routeCoords
+            });
+
+            router.replace({
+                pathname: "/run-summary",
+                params: { sessionId: newSessionId }
+            });
+        }
+    }
+
     function onBackPress() {
         if (distanceKm > 0.01 && !isTracking) {
             // If stopped and has distance -> Save & Go to Summary
@@ -356,37 +418,38 @@ export default function TrackingScreen() {
 
 
     return (
-        <View style={styles.container}>
+        <Animated.View style={[styles.container, animatedContainerStyle]}>
             <SharedHeader
                 title="Tracking Lari"
                 centerTitle={true}
                 showBack={true}
                 onBackPress={onBackPress}
+                darkMode={isTracking}
             />
 
-            <View style={styles.content}>
+            <Animated.View style={[styles.content, animatedContainerStyle]}>
 
                 {/* Main Distance Display */}
                 <Animated.View entering={FadeInUp.duration(450)} style={styles.mainDisplay}>
-                    <Animated.Text style={[styles.bigNumber, kmStyle]}>
+                    <Animated.Text style={[styles.bigNumber, kmStyle, animatedBigNumberStyle]}>
                         {distanceKm.toFixed(2)}
                     </Animated.Text>
-                    <Text style={styles.unit}>KILOMETER</Text>
+                    <Animated.Text style={[styles.unit, animatedUnitStyle]}>KILOMETER</Animated.Text>
                 </Animated.View>
 
                 {/* Stats Grid */}
                 <Animated.View entering={FadeInDown.duration(450)} style={styles.statsRow}>
                     {/* Card 1: Pace */}
-                    <View style={styles.statCard}>
-                        <Text style={styles.statValue}>{paceMinPerKm > 0 ? formatPace(paceMinPerKm) : "0:00"}</Text>
-                        <Text style={styles.statLabel}>PACE / KM</Text>
-                    </View>
+                    <Animated.View style={[styles.statCard, animatedCardStyle]}>
+                        <Animated.Text style={[styles.statValue, animatedBigNumberStyle]}>{paceMinPerKm > 0 ? formatPace(paceMinPerKm) : "0:00"}</Animated.Text>
+                        <Animated.Text style={[styles.statLabel, animatedStatLabelStyle]}>PACE / KM</Animated.Text>
+                    </Animated.View>
 
                     {/* Card 2: Time */}
-                    <View style={styles.statCard}>
-                        <Text style={styles.statValue}>{formatTime(elapsedSec)}</Text>
-                        <Text style={styles.statLabel}>WAKTU</Text>
-                    </View>
+                    <Animated.View style={[styles.statCard, animatedCardStyle]}>
+                        <Animated.Text style={[styles.statValue, animatedBigNumberStyle]}>{formatTime(elapsedSec)}</Animated.Text>
+                        <Animated.Text style={[styles.statLabel, animatedStatLabelStyle]}>WAKTU</Animated.Text>
+                    </Animated.View>
                 </Animated.View>
 
                 {/* Target Card - Weekly Progress (Tap untuk lihat riwayat) */}
@@ -394,34 +457,34 @@ export default function TrackingScreen() {
                     activeOpacity={0.8}
                     onPress={() => router.push("/history")}
                 >
-                    <Animated.View entering={FadeInDown.duration(520)} style={styles.targetCard}>
+                    <Animated.View entering={FadeInDown.duration(520)} style={[styles.targetCard, animatedCardStyle]}>
                         <View style={styles.targetRow}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={styles.targetIcon}>◎</Text>
-                                <Text style={styles.targetTitle}> Target Mingguan {TARGET_KM} KM</Text>
+                                <Animated.Text style={[styles.targetIcon, animatedUnitStyle]}>◎</Animated.Text>
+                                <Animated.Text style={[styles.targetTitle, animatedTargetTitleStyle]}> Target Mingguan {TARGET_KM} KM</Animated.Text>
                             </View>
-                            <Text style={styles.targetPct}>{Math.round(progress * 100)}%</Text>
+                            <Animated.Text style={[styles.targetPct, animatedTargetTitleStyle]}>{Math.round(progress * 100)}%</Animated.Text>
                         </View>
 
-                        <View
-                            style={styles.progressTrack}
+                        <Animated.View
+                            style={[styles.progressTrack, animatedTrackStyle]}
                             onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
                         >
                             <Animated.View style={[styles.progressFill, barStyle]} />
-                        </View>
+                        </Animated.View>
 
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
-                            <Text style={styles.targetHint}>
+                            <Animated.Text style={[styles.targetHint, animatedTargetHintStyle]}>
                                 Minggu ini: {totalWeeklyKm.toFixed(2)} km
-                            </Text>
-                            <Text style={styles.targetHint}>
+                            </Animated.Text>
+                            <Animated.Text style={[styles.targetHint, animatedTargetHintStyle]}>
                                 {remainingKm > 0 ? `${remainingKm.toFixed(2)} km lagi` : '✓ Target tercapai!'}
-                            </Text>
+                            </Animated.Text>
                         </View>
 
-                        <Text style={[styles.targetHint, { textAlign: 'center', marginTop: 8, color: '#6B8B6B' }]}>
+                        <Animated.Text style={[styles.targetHint, { textAlign: 'center', marginTop: 8 }, animatedTargetToggleHintStyle]}>
                             Tap untuk lihat riwayat →
-                        </Text>
+                        </Animated.Text>
                     </Animated.View>
                 </TouchableOpacity>
 
@@ -431,12 +494,21 @@ export default function TrackingScreen() {
                     </View>
                 )}
 
-            </View>
+            </Animated.View>
 
             {/* Bottom Action Area */}
             <Animated.View entering={FadeInUp.duration(520)} style={styles.bottomArea}>
                 {!isTracking ? (
                     <>
+                        {distanceKm > 0 && (
+                            <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={finishRun}
+                                style={styles.finishButton}
+                            >
+                                <Text style={styles.finishButtonText}>SELESAI</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity
                             activeOpacity={0.8}
                             onPress={startTracking}
@@ -444,7 +516,7 @@ export default function TrackingScreen() {
                         >
                             <Ionicons name="play" size={36} color="white" style={{ marginLeft: 6 }} />
                         </TouchableOpacity>
-                        <Text style={styles.actionPrompt}>TAP UNTUK MULAI LARI</Text>
+                        <Text style={styles.actionPrompt}>{distanceKm > 0 ? "LANJUTKAN LARI" : "TAP UNTUK MULAI LARI"}</Text>
                     </>
                 ) : (
                     <View style={styles.controlsRow}>
@@ -468,7 +540,7 @@ export default function TrackingScreen() {
                     </View>
                 )}
             </Animated.View>
-        </View>
+        </Animated.View>
     );
 }
 
@@ -577,5 +649,23 @@ const styles = StyleSheet.create({
         letterSpacing: 1.5,
         color: "#6B776B",
         marginTop: 16
-    }
+    },
+    finishButton: {
+        backgroundColor: "#2E7D32", // Green
+        paddingHorizontal: 40,
+        paddingVertical: 14,
+        borderRadius: 30,
+        marginBottom: 24,
+        shadowColor: "#2E7D32",
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+    },
+    finishButtonText: {
+        color: "#FFFFFF",
+        fontSize: 16,
+        fontWeight: "900",
+        letterSpacing: 2,
+    },
 });
