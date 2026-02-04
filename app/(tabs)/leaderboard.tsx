@@ -50,12 +50,21 @@ export default function LeaderboardScreen() {
         entering={FadeInDown.delay(index < 10 ? 80 * index : 0).duration(350)}
         style={[
           styles.row,
-          isFirst && styles.rowFirst,
           isUser && styles.rowUser,
         ]}
       >
-        <View style={[styles.rankBox, isFirst && styles.rankBoxFirst]}>
-          <Text style={[styles.rank, isFirst && styles.rankFirst]}>#{index + 1}</Text>
+        <View style={[
+          styles.rankBox,
+          index === 0 && { backgroundColor: "#FFD700" }, // Gold
+          index === 1 && { backgroundColor: "#C0C0C0" }, // Silver
+          index === 2 && { backgroundColor: "#CD7F32" }, // Bronze
+        ]}>
+          <Text style={[
+            styles.rank,
+            index <= 2 && { color: "#FFFFFF" }, // White text for top 3
+          ]}>
+            #{index + 1}
+          </Text>
         </View>
 
         <View style={{ flex: 1, marginLeft: 12 }}>
@@ -157,11 +166,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-  rowFirst: {
-    backgroundColor: "#FFF8E1", // Gold/Beige tint for #1
-    borderWidth: 1,
-    borderColor: "rgba(255, 215, 0, 0.3)",
-  },
   rowUser: {
     borderWidth: 1,
     borderColor: "#2E3A2E",
@@ -176,12 +180,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  rankBoxFirst: {
-    backgroundColor: "#FFD700",
-  },
 
   rank: { fontWeight: "900", color: "#6B776B", fontSize: 14 },
-  rankFirst: { color: "#FFF" }, // White text for #1
 
   name: { fontWeight: "900", color: "#2E3A2E", fontSize: 14 },
   sub: { marginTop: 2, fontSize: 12, color: "rgba(46,58,46,0.5)", fontWeight: "700" },
