@@ -16,8 +16,11 @@
         "NSLocationAlwaysUsageDescription": "Aplikasi ini membutuhkan akses lokasi di latar belakang untuk melacak rute lari saat HP dikunci.",
         "UIBackgroundModes": [
           "location",
+          "fetch",
+          "location",
           "fetch"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.forza.app"
     },
@@ -53,6 +56,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2c30602e-c859-492c-8085-f3b13a958be2"
+      }
+    },
+    "owner": "pieinspace"
   }
 }
